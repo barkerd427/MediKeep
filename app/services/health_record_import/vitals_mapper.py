@@ -1,4 +1,6 @@
-"""Vital-sign Observations to Vitals rows, including unit conversion."""
+"""
+Maps vital-sign Observations to Vitals rows, converting units on the way.
+"""
 
 from typing import Dict, Iterable, List, Optional, Tuple
 
@@ -17,17 +19,15 @@ from app.services.health_record_import.vocab import (
     VITAL_SIGN_CODES,
 )
 
-# --- unit conversion --------------------------------------------------------
-
 
 def convert_vital_value(
     column: str, value: float, unit: Optional[str]
 ) -> Optional[float]:
-    """Convert a vital sign quantity to the unit the Vitals model stores.
+    """
+    Convert a measurement to the unit the Vitals column stores.
 
     Vitals stores temperature in Fahrenheit, weight in pounds, height in inches
-    and glucose in mg/dL. Unknown units for those columns return None so the
-    caller can report the observation instead of storing a wrong number.
+    and glucose in mg/dL. Returns None for a unit it cannot convert.
     """
     u = (unit or "").strip()
     lowered = u.lower()
@@ -69,6 +69,7 @@ def convert_vital_value(
 
 
 def _vitals_key(effective: Optional[str]) -> str:
+    """Grouping key for a measurement time, normalized to ISO format."""
     parsed = parse_datetime(effective)
     if parsed is None:
         return "unknown"
@@ -81,11 +82,11 @@ def map_vital_signs(
     import_source: str,
     unmapped: List[UnmappedItem],
 ) -> List[dict]:
-    """Group vital-sign Observations by effective time into Vitals rows.
+    """
+    Group vital-sign Observations by effective time into Vitals rows.
 
-    The row's external_id is derived from the effective time rather than from
-    one of the Observation ids, so a later export that adds another measurement
-    at the same time updates the same row.
+    The row's external_id is "vitals:<time>" rather than an Observation id,
+    which lets a later export add measurements to an existing row.
     """
     rows: Dict[str, dict] = {}
     for obs in observations:
@@ -112,6 +113,7 @@ def map_vital_signs(
             },
         )
         loinc = code_for(obs.get("code"), LOINC) or first_code(obs.get("code"))
+        # Blood pressure panels carry systolic and diastolic as components
         measurements: List[Tuple[str, float, Optional[str]]] = []
         if loinc == BLOOD_PRESSURE_PANEL or obs.get("component"):
             for component in obs.get("component") or []:
@@ -172,6 +174,7 @@ def map_vital_signs(
         if not row["_observation_ids"]:
             continue
         row.pop("_observation_ids")
+        # Calculate BMI when the source did not record one
         if row.get("weight") and row.get("height") and not row.get("bmi"):
             row["bmi"] = round((row["weight"] / (row["height"] ** 2)) * 703, 1)
         result.append(row)

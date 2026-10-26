@@ -1,13 +1,13 @@
 /**
  * Health Record Import Service
- * Uploads a C-CDA XML, MyChart XDM zip or FHIR R4 Bundle for preview and import.
+ * Handles API calls for importing C-CDA, MyChart zip and FHIR Bundle files
  */
 
 import { apiClient } from './apiClient';
 
 class HealthRecordImportService {
   /**
-   * Accepted upload formats and the size limit.
+   * Get accepted upload formats and the size limit
    * @returns {Promise<{formats: Array, max_file_size_bytes: number, import_sources: string[]}>}
    */
   async getFormats() {
@@ -16,9 +16,10 @@ class HealthRecordImportService {
   }
 
   /**
-   * Convert the file and report what an import would create or update.
+   * Preview a health record import
    * @param {number} patientId
-   * @param {File} file
+   * @param {File} file - .xml, .zip or .json
+   * @returns {Promise<Object>} Preview response with counts per record type
    */
   async previewImport(patientId, file) {
     const formData = new FormData();
@@ -32,10 +33,11 @@ class HealthRecordImportService {
   }
 
   /**
-   * Import the file for the patient as idempotent upserts.
+   * Execute a health record import
    * @param {number} patientId
-   * @param {File} file
-   * @param {boolean} updateExisting - false leaves previously imported rows unchanged
+   * @param {File} file - re-uploaded
+   * @param {boolean} updateExisting - when false, rows imported earlier are left unchanged
+   * @returns {Promise<Object>} Import result with counts
    */
   async executeImport(patientId, file, updateExisting = true) {
     const formData = new FormData();

@@ -1,4 +1,6 @@
-"""DiagnosticReports and laboratory Observations to LabResult rows with components."""
+"""
+Maps DiagnosticReports and laboratory Observations to lab results with components.
+"""
 
 import re
 from typing import Dict, List, Optional, Tuple
@@ -28,6 +30,7 @@ from app.services.health_record_import.vocab import (
 def _reference_range(
     observation: dict,
 ) -> Tuple[Optional[float], Optional[float], Optional[str]]:
+    """Return (low, high, text) from the first referenceRange."""
     ranges = [r for r in observation.get("referenceRange") or [] if isinstance(r, dict)]
     if not ranges:
         return None, None, None
@@ -40,6 +43,7 @@ def _reference_range(
         high = float(high) if high is not None else None
     except (TypeError, ValueError):
         low, high = None, None
+    # Some sources only give the range as text ("70 - 99", ">= 60")
     if low is None and high is None and text:
         match = re.match(r"^\s*(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)", str(text))
         if match:
@@ -53,6 +57,7 @@ def _reference_range(
                 high = float(lte.group(1))
     if low is not None and high is not None and high <= low:
         low, high = None, None
+    # Build the display text when only numeric bounds were given
     if not text and (low is not None or high is not None):
         unit = ((rng.get("high") or rng.get("low") or {}).get("unit")) or ""
         if low is not None and high is not None:
@@ -65,6 +70,7 @@ def _reference_range(
 
 
 def _interpretation_status(observation: dict) -> Optional[str]:
+    """Component status (high, low, critical, ...) from the interpretation code."""
     for concept in observation.get("interpretation") or []:
         code = first_code(concept)
         if code and code.upper() in INTERPRETATION_STATUS:
@@ -78,6 +84,12 @@ def map_lab_component(
     canonical_lookup: Optional[CanonicalLookup],
     order: int,
 ) -> Optional[dict]:
+    """
+    Map a laboratory Observation to a LabTestComponentCreate dict.
+
+    Picks the result type from whichever value[x] is present. Returns None
+    when the observation carries no value at all.
+    """
     name = display_for(observation.get("code"))
     if not name:
         return None
@@ -117,6 +129,7 @@ def map_lab_component(
             display_for(observation.get("valueCodeableConcept"))
             or str(observation.get("valueString") or "").strip()
         )
+        # Known words become qualitative results, anything else stays as text
         qualitative = QUALITATIVE_VALUES.get(text.lower())
         if qualitative:
             component.update(result_type="qualitative", qualitative_value=qualitative)
@@ -144,7 +157,7 @@ def map_lab_component(
             ref_range_text=text,
         )
     else:
-        return None  # no value (for example dataAbsentReason)
+        return None
     if canonical_lookup is not None:
         canonical, category = canonical_lookup(component["test_name"])
         component["canonical_test_name"] = canonical
@@ -160,10 +173,11 @@ def map_lab_results(
     canonical_lookup: Optional[CanonicalLookup],
     unmapped: List[UnmappedItem],
 ) -> List[dict]:
-    """DiagnosticReports plus their laboratory Observations as LabResult dicts.
+    """
+    Build LabResultCreate dicts from DiagnosticReports and their Observations.
 
-    Laboratory Observations that no report references are grouped by date into
-    a synthetic result so they are still imported.
+    Observations no report references are grouped by date into one result per
+    day with the external_id "labs:<date>".
     """
     results: List[dict] = []
     claimed: set = set()
@@ -219,6 +233,7 @@ def map_lab_results(
             )
         )
 
+    # Group the observations no report claimed by date
     orphans: Dict[str, List[dict]] = {}
     for obs_id, obs in observations.items():
         if obs_id in claimed:
@@ -256,6 +271,7 @@ def map_lab_results(
 
 
 def _no_value_item(observation: dict) -> UnmappedItem:
+    """Unmapped entry for an observation without a value, naming the dataAbsentReason."""
     absent = display_for(observation.get("dataAbsentReason"))
     reason = (
         f"laboratory observation has no value ({absent.lower()})"
@@ -282,7 +298,9 @@ def _lab_result_dict(
     components,
     notes,
 ) -> dict:
+    """Assemble the LabResultCreate dict and roll the component flags up into labs_result."""
     statuses = {c.get("status") for c in components if c.get("status")}
+    # Worst component flag decides the overall result
     if components and statuses and statuses <= {"normal"}:
         labs_result = "normal"
     elif statuses & {"critical"}:

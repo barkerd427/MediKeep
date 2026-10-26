@@ -1,7 +1,5 @@
-"""Vocabularies used by the FHIR mapper: code systems, status maps, units and limits.
-
-Kept apart from the mapping functions so each table can be read and extended
-without wading through the mapping logic.
+"""
+Lookup tables for the FHIR mapper: code systems, status maps, routes and field limits.
 """
 
 from typing import Dict
@@ -14,7 +12,7 @@ CPT = "http://www.ama-assn.org/go/cpt"
 RXNORM = "http://www.nlm.nih.gov/research/umls/rxnorm"
 CVX = "http://hl7.org/fhir/sid/cvx"
 
-# LOINC code -> (Vitals column, converter from (value, unit) to stored unit)
+# LOINC code -> Vitals column
 VITAL_SIGN_CODES: Dict[str, str] = {
     "8480-6": "systolic_bp",
     "8462-4": "diastolic_bp",
@@ -41,7 +39,7 @@ INTEGER_VITALS = {
     "pain_scale",
 }
 
-# Interpretation codes (HL7 v3 ObservationInterpretation) -> lab component status.
+# HL7 v3 ObservationInterpretation code -> lab component status
 INTERPRETATION_STATUS = {
     "H": "high",
     "HU": "high",
@@ -54,7 +52,7 @@ INTERPRETATION_STATUS = {
     "N": "normal",
 }
 
-# FHIR -> MediKeep status vocabularies.
+# FHIR status -> MediKeep status
 CONDITION_STATUS = {
     "active": "active",
     "recurrence": "recurrence",
@@ -151,7 +149,7 @@ QUALITATIVE_VALUES = {
     "absent": "undetected",
 }
 
-# Field length limits taken from the Create schemas, so mapped values pass them.
+# Field length limits from the Create schemas
 MAX_LEN = {
     "condition_diagnosis": 500,
     "condition_code": 20,

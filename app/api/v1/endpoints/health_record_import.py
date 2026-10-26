@@ -1,4 +1,6 @@
-"""Import a C-CDA / MyChart export / FHIR Bundle into an existing patient's records."""
+"""
+Health record import endpoints (C-CDA, MyChart zip, FHIR Bundle).
+"""
 
 from typing import Any
 
@@ -21,6 +23,7 @@ from app.services.health_record_import.importer import HealthRecordImporter
 
 router = APIRouter()
 
+# Initialize logger
 logger = get_logger(__name__, "app")
 
 
@@ -29,17 +32,18 @@ def verify_import_patient(
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> int:
-    """Imports write records, so they need edit rights on the target patient."""
+    """Resolve patient_id from the form and require edit access to that patient."""
     return deps.verify_patient_access(
         patient_id, db, current_user, required_permission="edit"
     )
 
 
 def _read_upload(file: UploadFile, request: Request) -> tuple[bytes, str]:
-    """Read and size-check the upload; type checks happen in the converter."""
+    """Check the filename, extension and size of the upload and return its bytes."""
     if not file or not file.filename:
         raise ValidationException(message="No file provided", request=request)
 
+    # Validate file extension
     ext = file.filename.rsplit(".", 1)[-1].lower() if "." in file.filename else ""
     if f".{ext}" not in converter.ACCEPTED_EXTENSIONS:
         raise ValidationException(
@@ -50,6 +54,7 @@ def _read_upload(file: UploadFile, request: Request) -> tuple[bytes, str]:
             request=request,
         )
 
+    # Read one byte past the limit to detect oversized files
     raw = file.file.read(converter.MAX_IMPORT_FILE_SIZE + 1)
     if len(raw) > converter.MAX_IMPORT_FILE_SIZE:
         raise ValidationException(
@@ -62,6 +67,7 @@ def _read_upload(file: UploadFile, request: Request) -> tuple[bytes, str]:
 
 
 def _convert(raw: bytes, filename: str, request: Request, current_user_id: int):
+    """Convert the upload, turning conversion errors into a 400 response."""
     try:
         return converter.convert_upload(raw, filename)
     except converter.HealthRecordConversionError as exc:
@@ -104,6 +110,7 @@ def preview_import(
     converted = _convert(raw, filename, request, current_user_id)
 
     with handle_database_errors(request=request):
+        # Patient existence and access were checked by verify_import_patient
         patient = db.query(Patient).filter(Patient.id == patient_id).first()
         preview = HealthRecordImporter(db).preview(converted, patient=patient)
 
@@ -131,7 +138,7 @@ def execute_import(
     file: UploadFile = File(...),
     current_user_id: int = Depends(deps.get_current_user_id),
 ) -> Any:
-    """Import the upload for the patient as idempotent upserts."""
+    """Import the upload into the patient's records, updating rows imported earlier."""
     raw, filename = _read_upload(file, request)
     converted = _convert(raw, filename, request, current_user_id)
 

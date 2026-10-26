@@ -1,4 +1,6 @@
-"""Unit tests for the FHIR R4 to MediKeep mapper (health record import)."""
+"""
+Tests for the FHIR R4 to MediKeep mapper used by health record import.
+"""
 
 from datetime import date, datetime, timezone
 
@@ -47,7 +49,10 @@ def _obs(
 
 
 class TestCondition:
+    """Test Condition mapping."""
+
     def test_codes_dates_and_active_status(self):
+        """Test that codes, onset date and active status are carried over."""
         resource = {
             "resourceType": "Condition",
             "id": "c1",
@@ -82,6 +87,7 @@ class TestCondition:
         assert mapped["end_date"] is None
 
     def test_resolved_with_abatement(self):
+        """Test a resolved condition with month-precision onset and an abatement date."""
         resource = {
             "resourceType": "Condition",
             "id": "c2",
@@ -98,6 +104,7 @@ class TestCondition:
         assert mapped["end_date"] == date(2015, 1, 20)
 
     def test_missing_clinical_status_is_derived(self):
+        """Test that status is derived from the abatement date when clinicalStatus is absent."""
         resource = {
             "resourceType": "Condition",
             "id": "c3",
@@ -109,6 +116,7 @@ class TestCondition:
         assert map_condition(resource, PATIENT_ID, SOURCE)["status"] == "active"
 
     def test_without_name_is_rejected(self):
+        """Test that a Condition without a code is not mapped."""
         assert (
             map_condition({"resourceType": "Condition", "id": "c4"}, PATIENT_ID, SOURCE)
             is None
@@ -116,7 +124,10 @@ class TestCondition:
 
 
 class TestAllergy:
+    """Test AllergyIntolerance mapping."""
+
     def test_reaction_and_severity(self):
+        """Test reaction manifestations, severity and onset date."""
         resource = {
             "resourceType": "AllergyIntolerance",
             "id": "a1",
@@ -144,6 +155,7 @@ class TestAllergy:
         assert mapped["onset_date"] == date(2012, 6, 4)
 
     def test_criticality_fallback_and_unknown_severity(self):
+        """Test criticality as the severity fallback and the placeholder reaction text."""
         base = {
             "resourceType": "AllergyIntolerance",
             "id": "a2",
@@ -162,6 +174,7 @@ class TestAllergy:
         assert mapped["reaction"] == "Not recorded"
 
     def test_unconfirmed_verification(self):
+        """Test that an unconfirmed verificationStatus becomes the unconfirmed status."""
         resource = {
             "resourceType": "AllergyIntolerance",
             "id": "a3",
@@ -175,7 +188,10 @@ class TestAllergy:
 
 
 class TestMedication:
+    """Test MedicationStatement and MedicationRequest mapping."""
+
     def test_statement_dose_frequency_route_and_period(self):
+        """Test dose, frequency, route, period and indication from a MedicationStatement."""
         resource = {
             "resourceType": "MedicationStatement",
             "id": "m1",
@@ -212,6 +228,7 @@ class TestMedication:
         assert "Sig: Take 1 tablet" in mapped["notes"]
 
     def test_request_bounds_and_status_map(self):
+        """Test MedicationRequest bounds, status mapping and an unknown route."""
         resource = {
             "resourceType": "MedicationRequest",
             "id": "m2",
@@ -242,11 +259,12 @@ class TestMedication:
         assert mapped["effective_period_start"] == date(2024, 3, 1)
         assert mapped["effective_period_end"] == date(2025, 3, 1)
         assert mapped["frequency"] == "2 times per 1 day"
-        # Unknown routes are kept in the notes rather than rejected
+        # Unknown routes go in the notes
         assert mapped["route"] is None
         assert "Route: Transdermal patch" in mapped["notes"]
 
     def test_long_name_is_truncated_to_schema_limit(self):
+        """Test that a long medication name is cut to the schema limit."""
         resource = {
             "resourceType": "MedicationStatement",
             "id": "m3",
@@ -259,7 +277,10 @@ class TestMedication:
 
 
 class TestImmunization:
+    """Test Immunization mapping."""
+
     def test_fields(self):
+        """Test vaccine name, date, lot, manufacturer, dose number, route and site."""
         resource = {
             "resourceType": "Immunization",
             "id": "i1",
@@ -286,6 +307,7 @@ class TestImmunization:
         assert mapped["site"] == "Left upper arm structure"
 
     def test_without_date_is_rejected(self):
+        """Test that an Immunization without an occurrence date is not mapped."""
         resource = {
             "resourceType": "Immunization",
             "id": "i2",
@@ -296,7 +318,10 @@ class TestImmunization:
 
 
 class TestProcedure:
+    """Test Procedure mapping."""
+
     def test_cpt_code_date_and_status(self):
+        """Test that the CPT code is preferred and the facility comes from onBehalfOf."""
         resource = {
             "resourceType": "Procedure",
             "id": "p1",
@@ -340,6 +365,7 @@ class TestProcedure:
         ],
     )
     def test_status_vocabulary(self, fhir_status, expected):
+        """Test the FHIR to MediKeep procedure status mapping."""
         resource = {
             "resourceType": "Procedure",
             "id": "p2",
@@ -351,7 +377,10 @@ class TestProcedure:
 
 
 class TestEncounter:
+    """Test Encounter mapping."""
+
     def test_reason_type_location_and_duration(self):
+        """Test reason, visit type, location, duration and participant notes."""
         resource = {
             "resourceType": "Encounter",
             "id": "e1",
@@ -375,6 +404,7 @@ class TestEncounter:
         assert "Seen by: Robert Clinician MD" in mapped["notes"]
 
     def test_reason_falls_back_to_type_then_class(self):
+        """Test the reason fallback and that a non-finished status goes in the notes."""
         resource = {
             "resourceType": "Encounter",
             "id": "e2",
@@ -388,6 +418,8 @@ class TestEncounter:
 
 
 class TestVitals:
+    """Test vital sign grouping and unit conversion."""
+
     @pytest.mark.parametrize(
         "column,value,unit,expected",
         [
@@ -403,12 +435,15 @@ class TestVitals:
         ],
     )
     def test_unit_conversion(self, column, value, unit, expected):
+        """Test conversion into the units Vitals stores."""
         assert round(convert_vital_value(column, value, unit), 2) == expected
 
     def test_unknown_unit_is_rejected(self):
+        """Test that an unknown unit returns None."""
         assert convert_vital_value("weight", 10, "stone") is None
 
     def test_grouping_by_effective_time_and_bmi(self):
+        """Test that observations at one time become one row, with BMI calculated."""
         when = "2024-03-01T09:05:00-06:00"
         observations = [
             _obs("o1", "8480-6", 128, "mm[Hg]", when),
@@ -432,7 +467,7 @@ class TestVitals:
         )
         assert first["external_id"] == "vitals:2024-03-01T15:05:00+00:00"
         assert first["systolic_bp"] == 128 and first["diastolic_bp"] == 82
-        assert first["heart_rate"] == 72  # rounded to an integer column
+        assert first["heart_rate"] == 72  # integer column, rounded
         assert first["temperature"] == 98.6
         assert first["weight"] == 150.36
         assert first["height"] == 66.93
@@ -443,6 +478,7 @@ class TestVitals:
         assert rows[1]["heart_rate"] == 80
 
     def test_blood_pressure_panel_components(self):
+        """Test a blood pressure panel with systolic and diastolic components."""
         panel = {
             "resourceType": "Observation",
             "id": "bp",
@@ -465,6 +501,7 @@ class TestVitals:
         assert rows[0]["systolic_bp"] == 120 and rows[0]["diastolic_bp"] == 80
 
     def test_unmapped_code_and_unit_are_reported(self):
+        """Test that unknown codes and units are reported as unmapped."""
         unmapped = []
         rows = map_vital_signs(
             [_obs("x1", "77606-2", 7.3, "%"), _obs("x2", "29463-7", 10, "stone")],
@@ -479,7 +516,10 @@ class TestVitals:
 
 
 class TestLabResults:
+    """Test DiagnosticReport and laboratory Observation mapping."""
+
     def _report_and_observations(self):
+        """Build a CMP report with numeric, qualitative, absent and missing results."""
         when = "2024-03-01T07:30:00-06:00"
         glucose = _obs("g", "2345-7", 104, "mg/dL", when, category="laboratory")
         glucose["code"]["coding"][0][
@@ -529,6 +569,7 @@ class TestLabResults:
         return report, {o["id"]: o for o in (glucose, sodium, hiv, absent)}
 
     def test_report_with_components(self):
+        """Test a report with numeric, qualitative and absent components."""
         report, observations = self._report_and_observations()
         unmapped = []
         lookup = lambda name: (
@@ -550,7 +591,7 @@ class TestLabResults:
         components = {c["external_id"]: c for c in lab["components"]}
         assert set(components) == {"g", "s", "h"}
         glucose = components["g"]
-        assert glucose["status"] == "high"  # from the interpretation code
+        assert glucose["status"] == "high"  # interpretation code H
         assert glucose["value"] == 104 and glucose["unit"] == "mg/dL"
         assert (glucose["ref_range_min"], glucose["ref_range_max"]) == (70, 99)
         assert (
@@ -558,7 +599,7 @@ class TestLabResults:
             and glucose["category"] == "chemistry"
         )
         sodium = components["s"]
-        assert sodium["status"] is None  # left for the schema to derive from the range
+        assert sodium["status"] is None  # derived from the range by the schema
         assert (sodium["ref_range_min"], sodium["ref_range_max"]) == (135, 145)
         hiv = components["h"]
         assert (
@@ -570,6 +611,7 @@ class TestLabResults:
         assert "laboratory observation has no value (unknown)" in reasons
 
     def test_orphan_lab_observations_are_grouped_by_date(self):
+        """Test that observations without a report are grouped into one result per day."""
         _, observations = self._report_and_observations()
         results = map_lab_results([], observations, PATIENT_ID, SOURCE, None, [])
         assert len(results) == 1
@@ -578,7 +620,10 @@ class TestLabResults:
 
 
 class TestBundle:
+    """Test routing of a whole Bundle."""
+
     def test_bundle_routes_resources_and_reports_unmapped(self):
+        """Test that resources reach their mappers and the rest is reported as unmapped."""
         bundle = {
             "resourceType": "Bundle",
             "type": "collection",

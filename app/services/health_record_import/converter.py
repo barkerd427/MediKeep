@@ -1,9 +1,10 @@
-"""Turn an uploaded health record file into a FHIR R4 Bundle.
+"""
+Converts an uploaded health record file into a FHIR R4 Bundle.
 
-Accepts a bare C-CDA XML document, the IHE XDM zip that Epic MyChart produces
-for "Download my record" (or any zip holding C-CDA XML), or a FHIR R4 Bundle
-JSON file, which passes through untouched. C-CDA input is converted with
-healthrecord-bridge, which also returns a per-section ConversionReport.
+Accepts a C-CDA XML document, a MyChart export zip (IHE XDM, or any zip with
+C-CDA XML inside) or a FHIR R4 Bundle as JSON. C-CDA input goes through
+healthrecord-bridge, which also returns a per-section ConversionReport. JSON
+input is validated and passed through.
 """
 
 import io
@@ -20,14 +21,12 @@ from app.core.logging.config import get_logger
 
 logger = get_logger(__name__, "app")
 
-# Upload ceiling. Vitals CSV imports allow 10 MB; a multi-year C-CDA export with
-# every lab result is routinely larger than that, so this is five times higher.
+# Multi-year C-CDA exports run well past the 10 MB vitals CSV limit
 MAX_IMPORT_FILE_SIZE = 50 * 1024 * 1024  # 50 MB
 
-# Zip members are checked before extraction so a small archive cannot expand
-# into something that exhausts memory.
-MAX_ZIP_MEMBER_BYTES = 100 * 1024 * 1024  # 100 MB per XML document
-MAX_ZIP_TOTAL_BYTES = 200 * 1024 * 1024  # 200 MB across all documents
+# Uncompressed size limits for zip members, checked before extraction
+MAX_ZIP_MEMBER_BYTES = 100 * 1024 * 1024  # per XML document
+MAX_ZIP_TOTAL_BYTES = 200 * 1024 * 1024  # across all documents
 
 IMPORT_SOURCE_CCDA = "ccda"
 IMPORT_SOURCE_FHIR = "fhir"
@@ -44,7 +43,7 @@ ACCEPTED_FORMATS: List[Dict[str, object]] = [
         "name": "MyChart export (IHE XDM zip)",
         "extensions": [".zip"],
         "description": (
-            "The zip file produced by Epic MyChart's Download my record, "
+            "The zip file MyChart saves when you download your record, "
             "or any zip containing C-CDA XML documents."
         ),
     },
@@ -62,7 +61,7 @@ ACCEPTED_EXTENSIONS = {
 
 
 class HealthRecordConversionError(ValueError):
-    """The upload could not be turned into a FHIR Bundle."""
+    """Raised when the upload cannot be turned into a FHIR Bundle."""
 
 
 @dataclass
@@ -76,11 +75,12 @@ class ConvertedRecord:
     document_count: int
 
     def report_dict(self) -> Optional[dict]:
+        """Conversion report as a JSON-friendly dict, or None for FHIR input."""
         return self.report.to_dict() if self.report is not None else None
 
 
 def detect_format(filename: str, data: bytes) -> str:
-    """Return the format key for an upload, from its extension first, then its bytes."""
+    """Return the format key for an upload, by extension if there is one, else by content."""
     suffix = PurePosixPath(filename or "").suffix.lower()
     if suffix == ".zip":
         return "ccda_zip"
@@ -107,10 +107,11 @@ def detect_format(filename: str, data: bytes) -> str:
 
 
 def convert_upload(data: bytes, filename: str) -> ConvertedRecord:
-    """Convert the upload to a FHIR R4 Bundle.
+    """
+    Convert an upload to a FHIR R4 Bundle.
 
-    Raises HealthRecordConversionError when the file is empty, over the size
-    limit, of an unsupported type, or not a parseable health record.
+    Raises HealthRecordConversionError for an empty or oversized file, an
+    unsupported type, or content that is not a health record.
     """
     if not data:
         raise HealthRecordConversionError("The uploaded file is empty")
@@ -158,6 +159,7 @@ def convert_upload(data: bytes, filename: str) -> ConvertedRecord:
 
 
 def _convert_zip(data: bytes, filename: str) -> Tuple[dict, ConversionReport]:
+    """Convert every C-CDA XML member of a zip and merge the results into one Bundle."""
     bundles = []
     documents = []
     total = 0
@@ -185,6 +187,7 @@ def _convert_zip(data: bytes, filename: str) -> Tuple[dict, ConversionReport]:
 
 
 def _load_fhir_bundle(data: bytes) -> dict:
+    """Parse uploaded JSON and check it is a Bundle whose entries hold resources."""
     try:
         bundle = json.loads(data.decode("utf-8-sig"))
     except (UnicodeDecodeError, json.JSONDecodeError) as exc:

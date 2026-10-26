@@ -1,11 +1,10 @@
-"""Map FHIR R4 resources onto MediKeep create dicts.
+"""
+Maps FHIR R4 resources onto MediKeep create dicts.
 
-Everything here is a pure function of the Bundle: no database access. Each
-output dict carries ``patient_id``, ``external_id`` (the FHIR resource id,
-deterministic when produced by healthrecord-bridge) and ``import_source``, and
-is shaped so it passes the matching ``*Create`` Pydantic schema. Anything the
-mapper cannot place is recorded in ``MappedRecords.unmapped`` with the resource
-type and a reason, so nothing disappears silently.
+No database access happens here. Each output dict carries patient_id,
+external_id (the FHIR resource id) and import_source and is shaped to pass the
+matching Create schema. Resources that are not imported are recorded in
+MappedRecords.unmapped with the resource type and a reason.
 """
 
 from datetime import date
@@ -45,7 +44,8 @@ from app.services.health_record_import.vocab import (
 
 
 def map_patient(resource: dict) -> dict:
-    """Demographics the importer compares against the MediKeep patient."""
+    """Extract the demographics used to compare the file against the MediKeep patient."""
+    # Prefer the official name when the file carries several
     names = [n for n in resource.get("name") or [] if isinstance(n, dict)]
     official = next((n for n in names if n.get("use") == "official"), None)
     name = official or (names[0] if names else {})
@@ -65,6 +65,7 @@ def map_patient(resource: dict) -> dict:
 def map_condition(
     resource: dict, patient_id: int, import_source: str
 ) -> Optional[dict]:
+    """Map a Condition to a ConditionCreate dict. Returns None without a diagnosis name."""
     code = resource.get("code")
     diagnosis = display_for(code)
     if not diagnosis:
@@ -81,6 +82,7 @@ def map_condition(
     abatement_start, _ = _period_or_datetime(resource, "abatement")
     onset_date = parse_date(onset_start)
     end_date = parse_date(abatement_start)
+    # An abatement date overrides an active status
     status = CONDITION_STATUS.get(clinical)
     if status is None:
         status = "resolved" if end_date else "active"
@@ -115,6 +117,12 @@ def map_condition(
 
 
 def map_allergy(resource: dict, patient_id: int, import_source: str) -> Optional[dict]:
+    """
+    Map an AllergyIntolerance to an AllergyCreate dict.
+
+    Manifestations from all reactions are joined into the reaction text. The
+    first reaction severity wins; without one, criticality is used instead.
+    """
     allergen = display_for(resource.get("code"))
     if not allergen:
         return None
@@ -164,6 +172,7 @@ def map_allergy(resource: dict, patient_id: int, import_source: str) -> Optional
 
 
 def _frequency_text(timing: Optional[dict]) -> Optional[str]:
+    """Render a Timing as short text like "daily" or "2 times per 1 day"."""
     if not isinstance(timing, dict):
         return None
     code_text = display_for(timing.get("code"))
@@ -199,6 +208,7 @@ def _frequency_text(timing: Optional[dict]) -> Optional[str]:
 
 
 def _dose_text(dosage: dict) -> Optional[str]:
+    """Dose as text from doseQuantity or doseRange, with UCUM count units spelled out."""
     for entry in dosage.get("doseAndRate") or []:
         quantity = entry.get("doseQuantity") if isinstance(entry, dict) else None
         if isinstance(quantity, dict) and quantity.get("value") is not None:
@@ -224,6 +234,7 @@ def _dose_text(dosage: dict) -> Optional[str]:
 def map_medication(
     resource: dict, patient_id: int, import_source: str
 ) -> Optional[dict]:
+    """Map a MedicationStatement or MedicationRequest to a MedicationCreate dict."""
     is_request = resource.get("resourceType") == "MedicationRequest"
     concept = resource.get("medicationCodeableConcept")
     name = display_for(concept) or (resource.get("medicationReference") or {}).get(
@@ -256,6 +267,7 @@ def map_medication(
     if start and end and end < start:
         end = None
 
+    # Keep the sig and any route MediKeep has no value for in the notes
     notes_parts = []
     if sig and sig != dose:
         notes_parts.append(f"Sig: {sig}")
@@ -287,6 +299,7 @@ def map_medication(
 def map_immunization(
     resource: dict, patient_id: int, import_source: str
 ) -> Optional[dict]:
+    """Map an Immunization to an ImmunizationCreate dict. Needs a vaccine name and a date."""
     name = display_for(resource.get("vaccineCode"))
     administered = parse_date(
         resource.get("occurrenceDateTime") or resource.get("occurrenceString")
@@ -345,6 +358,7 @@ def map_immunization(
 def map_procedure(
     resource: dict, patient_id: int, import_source: str
 ) -> Optional[dict]:
+    """Map a Procedure to a ProcedureCreate dict. Needs a name and a performed date."""
     name = display_for(resource.get("code"))
     start, _ = _period_or_datetime(resource, "performed")
     performed = parse_date(start)
@@ -355,6 +369,7 @@ def map_procedure(
     if status is None:
         status = "completed" if performed <= date.today() else "scheduled"
     code = code_for(resource.get("code"), CPT) or first_code(resource.get("code"))
+    # Facility comes from the performing organization, else the location
     facility = None
     for performer in resource.get("performer") or []:
         if isinstance(performer, dict):
@@ -391,6 +406,12 @@ def map_procedure(
 def map_encounter(
     resource: dict, patient_id: int, import_source: str
 ) -> Optional[dict]:
+    """
+    Map an Encounter to an EncounterCreate dict.
+
+    The reason falls back to the encounter type, then the class. Stays over
+    ten hours go in the notes because duration_minutes is capped at 600.
+    """
     period = resource.get("period") or {}
     when = parse_date(period.get("start") or period.get("end"))
     if not when:
@@ -410,13 +431,14 @@ def map_encounter(
     location = next((loc for loc in locations if loc), None)
     if not location:
         location = (resource.get("serviceProvider") or {}).get("display")
+    # Only compare start and end when both carry an offset or neither does
     duration = None
     stay_note = None
     start_dt = parse_datetime(period.get("start"))
     end_dt = parse_datetime(period.get("end"))
     if start_dt and end_dt and (start_dt.tzinfo is None) == (end_dt.tzinfo is None):
         minutes = int((end_dt - start_dt).total_seconds() // 60)
-        if 0 < minutes <= 600:  # EncounterCreate caps duration_minutes at 600
+        if 0 < minutes <= 600:
             duration = minutes
         elif minutes > 600:
             days, rem = divmod(minutes, 24 * 60)
@@ -483,13 +505,20 @@ def map_bundle(
     import_source: str,
     canonical_lookup: Optional[CanonicalLookup] = None,
 ) -> MappedRecords:
-    """Map every resource in a FHIR Bundle to MediKeep create dicts."""
+    """
+    Map every resource in a FHIR Bundle to MediKeep create dicts.
+
+    Observations and DiagnosticReports are collected first and handed to the
+    vitals and lab mappers, which group them. Patient resources are only
+    read for the demographics comparison.
+    """
     out = MappedRecords()
     vital_observations: List[dict] = []
     lab_observations: Dict[str, dict] = {}
     reports: List[dict] = []
     patients: List[dict] = []
 
+    # Resource types that map one to one
     simple = {
         "Condition": (map_condition, out.conditions),
         "AllergyIntolerance": (map_allergy, out.allergies),
@@ -517,6 +546,7 @@ def map_bundle(
         if rtype in _IGNORED_TYPES:
             out.unmapped.append(UnmappedItem(rtype, "resource type not imported", rid))
             continue
+        # Observations are grouped later, by effective time or by report
         if rtype == "Observation":
             categories = _category_codes(resource)
             if status in _SKIPPED_STATUSES:
@@ -539,6 +569,7 @@ def map_bundle(
         if rtype == "DiagnosticReport":
             reports.append(resource)
             continue
+        # "No known allergy" entries arrive as refuted AllergyIntolerances
         if rtype == "AllergyIntolerance":
             verification = (
                 first_code(resource.get("verificationStatus")) or ""
@@ -565,6 +596,8 @@ def map_bundle(
                 )
             )
             continue
+
+        # Everything else goes through its mapper
         if rtype in simple:
             if status in _SKIPPED_STATUSES:
                 out.unmapped.append(UnmappedItem(rtype, "entered in error", rid))

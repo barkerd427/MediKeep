@@ -53,10 +53,8 @@ class LabResult(Base):
     ref_range_max = Column(Float, nullable=True)
     ref_range_text = Column(String, nullable=True)
 
-    # Provenance of imported rows (health record import). external_id is the
-    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
-    import_source = Column(String, nullable=True)
-    external_id = Column(String, nullable=True)
+    import_source = Column(String, nullable=True)  # "ccda"/"fhir"; NULL if manual
+    external_id = Column(String, nullable=True)  # FHIR resource id from the import
 
     # Audit fields
     created_at = Column(DateTime, nullable=True)
@@ -187,10 +185,8 @@ class LabTestComponent(Base):
     # Notes
     notes = Column(Text, nullable=True)
 
-    # Provenance of imported rows (health record import). external_id is the
-    # deterministic FHIR resource id, scoped to the lab result; NULL for manual entries.
-    import_source = Column(String, nullable=True)
-    external_id = Column(String, nullable=True)
+    import_source = Column(String, nullable=True)  # Import source key; NULL if manual
+    external_id = Column(String, nullable=True)  # FHIR Observation id, per lab result
 
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)

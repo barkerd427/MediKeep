@@ -278,7 +278,7 @@
   },
   "healthRecordImport": {
     "title": "Import health record",
-    "description": "Import a Continuity of Care Document (C-CDA XML), the zip file MyChart produces when you download your record, or a FHIR R4 Bundle (JSON). Records are matched on the identifiers in the file, so importing the same file again updates existing records instead of duplicating them.",
+    "description": "Import a Continuity of Care Document (C-CDA XML), the zip file MyChart produces when you download your record, or a FHIR R4 Bundle (JSON). Importing the same file again updates the records it created the first time.",
     "openButton": "Import health record",
     "noPatient": "Select a patient before importing.",
     "file": {

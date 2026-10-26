@@ -1,4 +1,6 @@
-"""API tests for the health record import endpoints (C-CDA / MyChart zip / FHIR Bundle)."""
+"""
+Test health record import API endpoints.
+"""
 
 import io
 import json
@@ -20,6 +22,7 @@ from app.models.models import (
     LabResult,
     LabTestComponent,
     Medication,
+    Patient,
     PatientShare,
     Procedure,
     Vitals,
@@ -38,6 +41,7 @@ FORMATS_URL = "/api/v1/health-records/import/formats"
 
 
 def _upload(path_or_bytes, name, content_type="application/xml"):
+    """Build the files= argument for a multipart upload."""
     data = (
         path_or_bytes
         if isinstance(path_or_bytes, bytes)
@@ -61,6 +65,7 @@ def _xdm_zip(xml_path: Path) -> bytes:
 
 
 def _row_counts(db: Session, patient_id: int) -> dict:
+    """Count the patient's rows per record type."""
     counts = {}
     for key, model in (
         ("conditions", Condition),
@@ -82,9 +87,8 @@ def _row_counts(db: Session, patient_id: int) -> dict:
     return counts
 
 
-# Expected rows for mychart_like_ccd.xml: one allergy is a negated "no known
-# food allergy" entry and one immunization is a refusal, so both are reported
-# as unmapped rather than imported.
+# Rows mychart_like_ccd.xml produces. The fixture also has a "no known food
+# allergy" entry and a refused immunization, which are reported as unmapped.
 MYCHART_EXPECTED = {
     "conditions": 2,
     "allergies": 1,
@@ -99,9 +103,12 @@ MYCHART_EXPECTED = {
 
 
 class TestFormats:
+    """Test the formats endpoint."""
+
     def test_formats_lists_extensions_and_limit(
         self, client: TestClient, authenticated_headers
     ):
+        """Test that formats lists the accepted extensions, size limit and import sources."""
         response = client.get(FORMATS_URL, headers=authenticated_headers)
         assert response.status_code == 200
         body = response.json()
@@ -111,13 +118,17 @@ class TestFormats:
         assert body["import_sources"] == ["ccda", "fhir"]
 
     def test_formats_requires_auth(self, client: TestClient):
+        """Test that formats requires authentication."""
         assert client.get(FORMATS_URL).status_code == 401
 
 
 class TestPreview:
+    """Test the preview endpoint."""
+
     def test_preview_counts_for_mychart_ccd(
         self, client: TestClient, user_with_patient, authenticated_headers
     ):
+        """Test preview counts, conversion report, unmapped items and warnings for a C-CDA."""
         patient_id = user_with_patient["patient"].id
         response = client.post(
             PREVIEW_URL,
@@ -139,7 +150,7 @@ class TestPreview:
         assert body["total_new"] == sum(MYCHART_EXPECTED.values())
         assert body["total_update"] == 0
 
-        # The per-section conversion report from healthrecord-bridge rides along
+        # Per-section conversion report from healthrecord-bridge
         sections = {
             s["name"]: s for s in body["conversion_report"]["documents"][0]["sections"]
         }
@@ -153,7 +164,7 @@ class TestPreview:
             r == "Observation" and "social-history" in reason for r, reason in unmapped
         )
 
-        # Demographics in the file differ from the fixture patient (Test User, 1990)
+        # Fixture patient is Test User, born 1990
         assert body["patient"]["full_name"] == "Ms. Jane Quinn Sampleton"
         assert any("differs from the selected patient" in w for w in body["warnings"])
 
@@ -164,6 +175,7 @@ class TestPreview:
         user_with_patient,
         authenticated_headers,
     ):
+        """Test that preview writes nothing."""
         patient_id = user_with_patient["patient"].id
         client.post(
             PREVIEW_URL,
@@ -176,6 +188,7 @@ class TestPreview:
     def test_preview_accepts_mychart_xdm_zip(
         self, client: TestClient, user_with_patient, authenticated_headers
     ):
+        """Test preview of a MyChart XDM zip."""
         patient_id = user_with_patient["patient"].id
         response = client.post(
             PREVIEW_URL,
@@ -193,6 +206,7 @@ class TestPreview:
     def test_preview_synthea_document(
         self, client: TestClient, user_with_patient, authenticated_headers
     ):
+        """Test preview counts for a Synthea sample C-CDA."""
         patient_id = user_with_patient["patient"].id
         response = client.post(
             PREVIEW_URL,
@@ -209,6 +223,8 @@ class TestPreview:
 
 
 class TestExecute:
+    """Test the execute endpoint."""
+
     def test_execute_creates_rows_with_provenance(
         self,
         client: TestClient,
@@ -216,6 +232,7 @@ class TestExecute:
         user_with_patient,
         authenticated_headers,
     ):
+        """Test that execute creates rows with import_source and external_id and logs once."""
         patient_id = user_with_patient["patient"].id
         response = client.post(
             EXECUTE_URL,
@@ -262,7 +279,7 @@ class TestExecute:
             and components["2345-7"].import_source == "ccda"
         )
 
-        # Provenance is visible read-only on the regular API
+        # Provenance fields are returned by the regular endpoints
         listed = client.get(
             f"/api/v1/conditions/?patient_id={patient_id}",
             headers=authenticated_headers,
@@ -271,7 +288,7 @@ class TestExecute:
         assert {c["import_source"] for c in listed.json()} == {"ccda"}
         assert all(c["external_id"] for c in listed.json())
 
-        # Exactly one activity-log entry for the import
+        # One activity-log entry per import
         logs = (
             db_session.query(ActivityLog)
             .filter(
@@ -291,6 +308,7 @@ class TestExecute:
         user_with_patient,
         authenticated_headers,
     ):
+        """Test that importing the same file again updates rows and keeps user tags."""
         patient_id = user_with_patient["patient"].id
         first = client.post(
             EXECUTE_URL,
@@ -325,8 +343,8 @@ class TestExecute:
 
         db_session.expire_all()
         refreshed = db_session.get(Condition, condition_id)
-        assert refreshed.diagnosis != "edited locally"  # source data wins on update
-        assert refreshed.tags == ["mine"]  # user-owned tags are preserved
+        assert refreshed.diagnosis != "edited locally"  # file values win
+        assert refreshed.tags == ["mine"]  # tags are user-owned
 
     def test_update_existing_false_skips_existing_rows(
         self,
@@ -335,6 +353,7 @@ class TestExecute:
         user_with_patient,
         authenticated_headers,
     ):
+        """Test that update_existing=false leaves existing rows untouched."""
         patient_id = user_with_patient["patient"].id
         client.post(
             EXECUTE_URL,
@@ -372,6 +391,7 @@ class TestExecute:
         user_with_patient,
         authenticated_headers,
     ):
+        """Test that a FHIR Bundle JSON imports and matches the rows from the XML path."""
         patient_id = user_with_patient["patient"].id
         bundle = converter.convert_upload(
             MYCHART_CCD.read_bytes(), "mychart_like_ccd.xml"
@@ -408,7 +428,7 @@ class TestExecute:
             )
         } == {"fhir"}
 
-        # The same ids from the XML path update rather than duplicate
+        # Re-importing the XML matches the rows created from the JSON
         again = client.post(
             EXECUTE_URL,
             data={"patient_id": str(patient_id)},
@@ -425,8 +445,7 @@ class TestExecute:
         user_with_patient,
         authenticated_headers,
     ):
-        from app.models.models import Patient
-
+        """Test that the import does not create or modify a patient."""
         patient_id = user_with_patient["patient"].id
         before = db_session.query(Patient).count()
         client.post(
@@ -441,9 +460,12 @@ class TestExecute:
 
 
 class TestAccessControl:
+    """Test patient access checks on the import endpoints."""
+
     def _viewer_for(
         self, db_session: Session, owner_user, owner_patient_id, permission: str
     ):
+        """Share the owner's patient with a new user at the given permission level."""
         viewer = create_random_user(db_session)
         viewer_patient = patient_crud.create_for_user(
             db_session,
@@ -471,6 +493,7 @@ class TestAccessControl:
     def test_view_only_share_gets_403(
         self, client: TestClient, db_session: Session, user_with_patient
     ):
+        """Test that a view-only share cannot preview or import."""
         patient_id = user_with_patient["patient"].id
         headers = self._viewer_for(
             db_session, user_with_patient["user"], patient_id, "view"
@@ -488,6 +511,7 @@ class TestAccessControl:
     def test_edit_share_can_import(
         self, client: TestClient, db_session: Session, user_with_patient
     ):
+        """Test that an edit share can preview."""
         patient_id = user_with_patient["patient"].id
         headers = self._viewer_for(
             db_session, user_with_patient["user"], patient_id, "edit"
@@ -503,6 +527,7 @@ class TestAccessControl:
     def test_unrelated_user_gets_403(
         self, client: TestClient, db_session: Session, user_with_patient
     ):
+        """Test that a user without a share gets 403."""
         patient_id = user_with_patient["patient"].id
         stranger = create_random_user(db_session)
         response = client.post(
@@ -514,6 +539,7 @@ class TestAccessControl:
         assert response.status_code == 403
 
     def test_unknown_patient_gets_404(self, client: TestClient, authenticated_headers):
+        """Test that an unknown patient_id gets 404."""
         response = client.post(
             PREVIEW_URL,
             data={"patient_id": "999999"},
@@ -523,6 +549,7 @@ class TestAccessControl:
         assert response.status_code == 404
 
     def test_requires_auth(self, client: TestClient, user_with_patient):
+        """Test that preview requires authentication."""
         response = client.post(
             PREVIEW_URL,
             data={"patient_id": str(user_with_patient["patient"].id)},
@@ -532,9 +559,12 @@ class TestAccessControl:
 
 
 class TestRejectedUploads:
+    """Test uploads the endpoints reject."""
+
     def test_malformed_xml_is_rejected(
         self, client: TestClient, user_with_patient, authenticated_headers
     ):
+        """Test that XML which is not a ClinicalDocument gets 400."""
         response = client.post(
             PREVIEW_URL,
             data={"patient_id": str(user_with_patient["patient"].id)},
@@ -547,6 +577,7 @@ class TestRejectedUploads:
     def test_unsupported_extension_is_rejected(
         self, client: TestClient, user_with_patient, authenticated_headers
     ):
+        """Test that a CSV upload gets 422."""
         response = client.post(
             PREVIEW_URL,
             data={"patient_id": str(user_with_patient["patient"].id)},
@@ -558,6 +589,7 @@ class TestRejectedUploads:
     def test_json_that_is_not_a_bundle_is_rejected(
         self, client: TestClient, user_with_patient, authenticated_headers
     ):
+        """Test that JSON without resourceType Bundle gets 400."""
         response = client.post(
             PREVIEW_URL,
             data={"patient_id": str(user_with_patient["patient"].id)},
@@ -573,6 +605,7 @@ class TestRejectedUploads:
     def test_zip_without_documents_is_rejected(
         self, client: TestClient, user_with_patient, authenticated_headers
     ):
+        """Test that a zip with no XML members gets 400."""
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
             zf.writestr("README.TXT", "nothing here")
@@ -587,6 +620,7 @@ class TestRejectedUploads:
     def test_oversized_file_is_rejected(
         self, client: TestClient, user_with_patient, authenticated_headers, monkeypatch
     ):
+        """Test that a file over the size limit gets 422."""
         monkeypatch.setattr(converter, "MAX_IMPORT_FILE_SIZE", 1024)
         response = client.post(
             PREVIEW_URL,
@@ -600,6 +634,7 @@ class TestRejectedUploads:
     def test_missing_file_is_rejected(
         self, client: TestClient, user_with_patient, authenticated_headers
     ):
+        """Test that a request without a file gets 422."""
         response = client.post(
             PREVIEW_URL,
             data={"patient_id": str(user_with_patient["patient"].id)},

@@ -124,13 +124,6 @@ const ENTITY_ORDER = [
   'lab_test_components',
 ];
 
-const errorMessage = (err: any, fallback: string): string =>
-  err?.response?.data?.message ||
-  err?.response?.data?.detail ||
-  err?.data?.message ||
-  err?.message ||
-  fallback;
-
 const HealthRecordImportModal: React.FC<HealthRecordImportModalProps> = ({
   opened,
   onClose,
@@ -140,6 +133,7 @@ const HealthRecordImportModal: React.FC<HealthRecordImportModalProps> = ({
   const { t } = useTranslation(['reports', 'shared', 'common']);
   const { formatDate } = useDateFormat();
 
+  // State
   const [step, setStep] = useState<Step>('select');
   const [formats, setFormats] = useState<FormatsResponse | null>(null);
   const [file, setFile] = useState<File | null>(null);
@@ -149,6 +143,7 @@ const HealthRecordImportModal: React.FC<HealthRecordImportModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Load accepted formats when modal opens
   useEffect(() => {
     if (opened && !formats) {
       healthRecordImportService
@@ -163,6 +158,7 @@ const HealthRecordImportModal: React.FC<HealthRecordImportModalProps> = ({
     }
   }, [opened, formats]);
 
+  // Reset state when modal closes
   useEffect(() => {
     if (!opened) {
       setStep('select');
@@ -184,6 +180,7 @@ const HealthRecordImportModal: React.FC<HealthRecordImportModalProps> = ({
 
     setLoading(true);
     setError(null);
+
     try {
       const result = await healthRecordImportService.previewImport(
         patientId,
@@ -192,9 +189,13 @@ const HealthRecordImportModal: React.FC<HealthRecordImportModalProps> = ({
       setPreviewData(result);
       setStep('preview');
     } catch (err: any) {
-      setError(
-        errorMessage(err, t('reports:healthRecordImport.errors.previewFailed'))
-      );
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.detail ||
+        err?.data?.message ||
+        err?.message ||
+        t('reports:healthRecordImport.errors.previewFailed');
+      setError(message);
     } finally {
       setLoading(false);
     }
@@ -205,6 +206,7 @@ const HealthRecordImportModal: React.FC<HealthRecordImportModalProps> = ({
 
     setStep('importing');
     setError(null);
+
     try {
       const result = await healthRecordImportService.executeImport(
         patientId,
@@ -214,9 +216,13 @@ const HealthRecordImportModal: React.FC<HealthRecordImportModalProps> = ({
       setImportResult(result);
       setStep('complete');
     } catch (err: any) {
-      setError(
-        errorMessage(err, t('reports:healthRecordImport.errors.importFailed'))
-      );
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.detail ||
+        err?.data?.message ||
+        err?.message ||
+        t('reports:healthRecordImport.errors.importFailed');
+      setError(message);
       setStep('preview');
     }
   }, [file, patientId, updateExisting, t]);
@@ -346,6 +352,7 @@ const HealthRecordImportModal: React.FC<HealthRecordImportModalProps> = ({
 
     return (
       <Stack gap="md">
+        {/* Summary stats */}
         <Paper p="md" withBorder>
           <Group grow>
             <Stack gap={2} align="center">
@@ -375,6 +382,7 @@ const HealthRecordImportModal: React.FC<HealthRecordImportModalProps> = ({
           </Group>
         </Paper>
 
+        {/* Patient named in the file, for the user to check */}
         {previewData.patient?.full_name && (
           <Text size="sm" c="dimmed">
             {t('reports:healthRecordImport.patientInFile', {
@@ -398,6 +406,7 @@ const HealthRecordImportModal: React.FC<HealthRecordImportModalProps> = ({
           </Alert>
         )}
 
+        {/* Counts per record type */}
         <Table striped withTableBorder>
           <Table.Thead>
             <Table.Tr>
@@ -434,6 +443,7 @@ const HealthRecordImportModal: React.FC<HealthRecordImportModalProps> = ({
           />
         )}
 
+        {/* Sections the converter found in the document */}
         {sections.length > 0 && (
           <Stack gap={2}>
             <Text size="sm" fw={500}>
@@ -542,6 +552,8 @@ const HealthRecordImportModal: React.FC<HealthRecordImportModalProps> = ({
 
   const getTitle = () => {
     switch (step) {
+      case 'select':
+        return t('reports:healthRecordImport.title');
       case 'preview':
         return t('reports:healthRecordImport.previewTitle');
       case 'importing':

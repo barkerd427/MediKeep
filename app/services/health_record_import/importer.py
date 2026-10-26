@@ -1,10 +1,10 @@
-"""Preview and apply a converted health record as idempotent upserts.
+"""
+Previews and writes a converted health record for one patient.
 
-Rows are matched on ``(patient_id, external_id)`` (lab test components on
-``(lab_result_id, external_id)``). A preview reports what an import would do;
-``execute`` applies it in one transaction and writes one activity-log entry.
-The import never creates a Patient: demographic differences between the file
-and the selected MediKeep patient are reported as warnings only.
+Existing rows are matched on (patient_id, external_id), lab test components
+on (lab_result_id, external_id). Execute runs in one transaction and writes a
+single activity-log entry. The import never creates a Patient; demographic
+differences between the file and the selected patient become warnings.
 """
 
 from collections import Counter
@@ -58,7 +58,8 @@ from app.services.health_record_import.fhir_mapper import (
 logger = get_logger(__name__, "app")
 
 PROVENANCE_FIELDS = ("external_id", "import_source")
-# Fields the import never overwrites on an existing row: user-owned data.
+
+# User-owned fields, left alone when an existing row is updated
 PRESERVED_ON_UPDATE = {
     "tags",
     "practitioner_id",
@@ -101,17 +102,16 @@ ENTITY_KEYS = [*ENTITY_SPECS.keys(), COMPONENT_SPEC.key]
 
 @dataclass
 class _Plan:
-    """A validated import plan: per entity, the rows to create and to update."""
+    """Validated rows to create and update per entity, plus skipped counts."""
 
     mapped: MappedRecords
     create: Dict[str, List[dict]] = field(default_factory=dict)
     update: Dict[str, List[Tuple[Any, dict]]] = field(default_factory=dict)
     skipped: Counter = field(default_factory=Counter)
-    # For lab results, components ride along inside the parent dict under "components".
 
 
 def _canonical_lookup(test_name: str) -> Tuple[Optional[str], Optional[str]]:
-    """Match a component name the way the test-library sync does."""
+    """Look up the canonical test name and category for a component name."""
     canonical = canonical_test_matching.find_canonical_match(test_name)
     if not canonical:
         return None, None
@@ -121,6 +121,7 @@ def _canonical_lookup(test_name: str) -> Tuple[Optional[str], Optional[str]]:
 
 
 def _group_unmapped(items: List[UnmappedItem]) -> List[UnmappedGroup]:
+    """Group unmapped items by resource type and reason, keeping up to three examples each."""
     groups: Dict[Tuple[str, str], UnmappedGroup] = {}
     for item in items:
         key = (item.resource_type, item.reason)
@@ -138,16 +139,15 @@ def _group_unmapped(items: List[UnmappedItem]) -> List[UnmappedGroup]:
 
 
 class HealthRecordImporter:
-    """Preview or execute an import of a converted health record for one patient."""
+    """Previews or executes the import of a converted health record for one patient."""
 
     def __init__(self, db: Session):
         self.db = db
 
-    # --- public API ---------------------------------------------------------
-
     def preview(
         self, converted: ConvertedRecord, *, patient: Patient
     ) -> HealthRecordImportPreviewResponse:
+        """Build the import plan and report counts without writing anything."""
         plan = self._build_plan(converted, patient, update_existing=True)
         counts = {}
         for key in ENTITY_KEYS:
@@ -179,11 +179,18 @@ class HealthRecordImporter:
         update_existing: bool = True,
         request: Optional[Request] = None,
     ) -> HealthRecordImportResponse:
+        """
+        Write the import in one transaction and log it.
+
+        With update_existing False, rows that already exist are counted as
+        skipped and left unchanged.
+        """
         plan = self._build_plan(converted, patient, update_existing=update_existing)
         created: Counter = Counter()
         updated: Counter = Counter()
         try:
             for key, spec in ENTITY_SPECS.items():
+                # Lab results need a flush per row so components get the parent id
                 if key == "lab_results":
                     continue
                 for data in plan.create.get(key, []):
@@ -196,6 +203,7 @@ class HealthRecordImporter:
             self.db.flush()
             self.db.commit()
         except Exception:
+            # Roll back everything so a partial import never lands
             self.db.rollback()
             logger.error(
                 "Health record import failed, transaction rolled back",
@@ -225,11 +233,10 @@ class HealthRecordImporter:
         self._log_activity(response, patient, user_id, request)
         return response
 
-    # --- planning -----------------------------------------------------------
-
     def _build_plan(
         self, converted: ConvertedRecord, patient: Patient, *, update_existing: bool
     ) -> _Plan:
+        """Map the bundle, validate every row and decide create, update or skip."""
         mapped = map_bundle(
             converted.bundle,
             patient_id=patient.id,
@@ -239,10 +246,13 @@ class HealthRecordImporter:
         self._compare_demographics(mapped, patient)
         plan = _Plan(mapped=mapped)
 
+        # Decide create vs update per row against what the patient already has
+
         for key, spec in ENTITY_SPECS.items():
             rows = mapped.entity_lists()[key]
             existing = self._existing_by_external_id(spec, patient.id, rows)
             for row in rows:
+                # Components are validated separately in _plan_components
                 components = row.pop("components", None)
                 data = self._validate(spec, row, mapped, key)
                 if data is None:
@@ -264,7 +274,7 @@ class HealthRecordImporter:
         return plan
 
     def _plan_components(self, plan: _Plan, update_existing: bool) -> None:
-        """Validate components and count them; the parent decides create vs update."""
+        """Validate lab components and sort them into create, update or skipped."""
         for data in plan.create.get("lab_results", []):
             valid = []
             for component in data.get("components") or []:
@@ -275,6 +285,7 @@ class HealthRecordImporter:
                     valid.append(checked)
             data["components"] = valid
             plan.create.setdefault(COMPONENT_SPEC.key, []).extend(valid)
+        # Components of an existing result are matched on their own external_id
         for db_obj, data in plan.update.get("lab_results", []):
             existing = {
                 c.external_id: c for c in db_obj.test_components if c.external_id
@@ -301,7 +312,7 @@ class HealthRecordImporter:
     def _validate(
         self, spec: EntitySpec, row: dict, mapped: MappedRecords, key: str
     ) -> Optional[dict]:
-        """Run the row through the entity's Create schema; report failures as unmapped."""
+        """Validate a row with the entity's Create schema. Failures are recorded as unmapped."""
         provenance = {f: row.get(f) for f in PROVENANCE_FIELDS}
         try:
             model = spec.schema(
@@ -330,7 +341,7 @@ class HealthRecordImporter:
     def _validate_component(
         self, component: dict, mapped: MappedRecords
     ) -> Optional[dict]:
-        # lab_result_id is assigned at persist time; the schema wants a positive int.
+        """Validate a component with a placeholder lab_result_id, which is set on persist."""
         row = {**component, "lab_result_id": 1}
         data = self._validate(COMPONENT_SPEC, row, mapped, COMPONENT_SPEC.key)
         if data is not None:
@@ -340,11 +351,13 @@ class HealthRecordImporter:
     def _existing_by_external_id(
         self, spec: EntitySpec, patient_id: int, rows: List[dict]
     ) -> Dict[str, Any]:
+        """Load the patient's existing rows for the given external ids."""
         ids = [r["external_id"] for r in rows if r.get("external_id")]
         if not ids:
             return {}
         model = spec.crud.model
         found: Dict[str, Any] = {}
+        # Chunk the IN clause for large exports
         for start in range(0, len(ids), 500):
             chunk = ids[start : start + 500]
             for obj in (
@@ -355,11 +368,10 @@ class HealthRecordImporter:
                 found[obj.external_id] = obj
         return found
 
-    # --- persistence --------------------------------------------------------
-
     def _persist_lab_results(
         self, plan: _Plan, created: Counter, updated: Counter
     ) -> None:
+        """Write lab results and their components, matching components on external_id."""
         component_model = COMPONENT_SPEC.crud.model
         for data in plan.create.get("lab_results", []):
             components = data.pop("components", [])
@@ -388,19 +400,20 @@ class HealthRecordImporter:
 
     @staticmethod
     def _apply_update(db_obj: Any, data: dict) -> None:
+        """Copy mapped values onto an existing row, skipping user-owned fields."""
         for field_name, value in data.items():
             if field_name in PRESERVED_ON_UPDATE or field_name == "components":
                 continue
             if hasattr(db_obj, field_name):
                 setattr(db_obj, field_name, value)
 
-    # --- reporting ----------------------------------------------------------
-
     @staticmethod
     def _compare_demographics(mapped: MappedRecords, patient: Patient) -> None:
+        """Warn when the name or birth date in the file differs from the patient's."""
         info = mapped.patient
         if not info:
             return
+        # Compare names case-insensitively
         differences = []
         file_first = (info.get("first_name") or "").strip().lower()
         file_last = (info.get("last_name") or "").strip().lower()
@@ -425,6 +438,7 @@ class HealthRecordImporter:
 
     @staticmethod
     def _patient_summary(mapped: MappedRecords) -> Optional[ImportedPatientSummary]:
+        """Demographics from the file for the preview."""
         if not mapped.patient:
             return None
         return ImportedPatientSummary(
@@ -440,6 +454,7 @@ class HealthRecordImporter:
         user_id: int,
         request: Optional[Request],
     ) -> None:
+        """Write one activity-log entry with the per-entity counts."""
         summary = ", ".join(
             f"{key} {c.created}+{c.updated}"
             for key, c in response.counts.items()
@@ -470,18 +485,17 @@ class HealthRecordImporter:
                     request.headers.get("user-agent") if request is not None else None
                 ),
             )
-        except Exception as exc:  # logging must never fail the import
+        except Exception as exc:
+            # The import is already committed; a failed log entry must not undo it
             logger.warning(
                 "Activity logging failed for health record import",
                 extra={"patient_id": patient.id, "user_id": user_id, "error": str(exc)},
             )
-            try:
-                self.db.rollback()
-            except Exception:
-                pass
+            self.db.rollback()
 
 
 def _resource_label(entity_key: str) -> str:
+    """FHIR resource name to show for an entity key in the unmapped list."""
     return {
         "conditions": "Condition",
         "allergies": "AllergyIntolerance",
@@ -493,6 +507,3 @@ def _resource_label(entity_key: str) -> str:
         "lab_results": "DiagnosticReport",
         "lab_test_components": "Observation (laboratory)",
     }.get(entity_key, entity_key)
-
-
-__all__ = ["ENTITY_KEYS", "HealthRecordImporter"]

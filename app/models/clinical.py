@@ -46,10 +46,8 @@ class Medication(Base):
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
     practitioner_id = Column(Integer, ForeignKey("practitioners.id"), nullable=True)
 
-    # Provenance of imported rows (health record import). external_id is the
-    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
-    import_source = Column(String, nullable=True)
-    external_id = Column(String, nullable=True)
+    import_source = Column(String, nullable=True)  # "ccda"/"fhir"; NULL if manual
+    external_id = Column(String, nullable=True)  # Source record id for imported rows
 
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
@@ -165,10 +163,8 @@ class Encounter(Base):
         String, nullable=True
     )  # Use EncounterPriority enum: routine, urgent, emergency
 
-    # Provenance of imported rows (health record import). external_id is the
-    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
-    import_source = Column(String, nullable=True)
-    external_id = Column(String, nullable=True)
+    import_source = Column(String, nullable=True)  # Import source key; NULL if manual
+    external_id = Column(String, nullable=True)  # Id in the imported file
 
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
@@ -256,10 +252,8 @@ class Condition(Base):
     snomed_code = Column(String, nullable=True)  # SNOMED CT code
     code_description = Column(String, nullable=True)  # Description of the medical code
 
-    # Provenance of imported rows (health record import). external_id is the
-    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
-    import_source = Column(String, nullable=True)
-    external_id = Column(String, nullable=True)
+    import_source = Column(String, nullable=True)  # "ccda"/"fhir"; NULL if manual
+    external_id = Column(String, nullable=True)  # FHIR resource id from the import
 
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
@@ -340,10 +334,8 @@ class Immunization(Base):
     )  # Where vaccine was administered (clinic, hospital, pharmacy, etc.)
     notes = Column(Text, nullable=True)  # Additional notes
 
-    # Provenance of imported rows (health record import). external_id is the
-    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
-    import_source = Column(String, nullable=True)
-    external_id = Column(String, nullable=True)
+    import_source = Column(String, nullable=True)  # Import source key; NULL if manual
+    external_id = Column(String, nullable=True)  # Source record id for imported rows
 
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
@@ -443,10 +435,8 @@ class Allergy(Base):
     )  # Use AllergyStatus enum: active, inactive, resolved
     notes = Column(String, nullable=True)  # Additional notes about the allergy
 
-    # Provenance of imported rows (health record import). external_id is the
-    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
-    import_source = Column(String, nullable=True)
-    external_id = Column(String, nullable=True)
+    import_source = Column(String, nullable=True)  # "ccda"/"fhir"; NULL if manual
+    external_id = Column(String, nullable=True)  # Id in the imported file
 
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)

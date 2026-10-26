@@ -58,10 +58,8 @@ class Procedure(Base):
         String, nullable=True
     )  # Additional notes about the anesthesia
 
-    # Provenance of imported rows (health record import). external_id is the
-    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
-    import_source = Column(String, nullable=True)
-    external_id = Column(String, nullable=True)
+    import_source = Column(String, nullable=True)  # "ccda"/"fhir"; NULL if manual
+    external_id = Column(String, nullable=True)  # Source record id for imported rows
 
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)

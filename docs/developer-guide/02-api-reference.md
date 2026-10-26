@@ -5162,25 +5162,23 @@ Base path: `/api/v1/export`
 
 Base path: `/api/v1/health-records`
 
-Imports a C-CDA XML document, the IHE XDM zip that Epic MyChart produces for
-"Download my record", or a FHIR R4 Bundle (JSON) into an existing patient's
-records. C-CDA input is converted to FHIR R4 with
-[healthrecord-bridge](https://github.com/barkerd427/healthrecord-bridge); JSON
-input is taken as-is. Rows are upserted on `(patient_id, external_id)`, where
-`external_id` is the FHIR resource id (deterministic for converted documents),
-so importing the same file twice updates rows instead of duplicating them. The
-import never creates a Patient; demographic differences between the file and
-the target patient are returned as warnings only.
+Imports a C-CDA XML document, a MyChart export zip (IHE XDM) or a FHIR R4
+Bundle (JSON) into an existing patient's records. C-CDA input is converted to
+FHIR R4 with [healthrecord-bridge](https://github.com/barkerd427/healthrecord-bridge);
+JSON input is used as-is. Existing rows are matched on `(patient_id, external_id)`,
+where `external_id` is the FHIR resource id, and updated rather than inserted
+again. The import never creates a Patient.
 
-All three endpoints require authentication. Preview and execute take
-`patient_id` as a form field and require **edit** access to that patient
-(`PERM-403` otherwise, `NOT-404` for an unknown patient).
+Preview and execute take `patient_id` as a form field and require edit access
+to that patient.
 
 #### Get Accepted Formats
 
 `GET /health-records/import/formats`
 
+- **Authentication**: Yes
 - **Success Response** (200):
+
 ```json
 {
   "formats": [
@@ -5197,11 +5195,15 @@ All three endpoints require authentication. Preview and execute take
 
 `POST /health-records/import/preview`
 
+- **Purpose**: Convert the file and report what an import would create and update, without writing
+- **Authentication**: Yes
 - **Content-Type**: `multipart/form-data`
 - **Form Fields**:
-  - `patient_id` (integer, required): Target patient (edit access required)
-  - `file` (file, required): `.xml`, `.zip` or `.json`, at most 50 MB
+  - `patient_id` (integer, required): Target patient
+  - `file` (file, required): `.xml`, `.zip` or `.json`
+- **Max Size**: 50MB
 - **Success Response** (200):
+
 ```json
 {
   "source_format": "ccda_xml",
@@ -5221,7 +5223,7 @@ All three endpoints require authentication. Preview and execute take
   "total_new": 15,
   "total_update": 0,
   "total_skipped": 0,
-  "conversion_report": {"documents": [{"source": "...", "document_id": "...", "sections": [], "unknown_sections": [], "notes": []}], "resource_counts": {}, "unmapped_code_systems": []},
+  "conversion_report": {"documents": [{"source": "...", "sections": []}], "resource_counts": {}},
   "unmapped": [
     {"resource_type": "Immunization", "reason": "not administered", "count": 1, "examples": ["Tdap (Patient objection)"]}
   ],
@@ -5229,26 +5231,34 @@ All three endpoints require authentication. Preview and execute take
   "patient": {"full_name": "Ms. Jane Quinn Sampleton", "birth_date": "1984-07-22", "gender": "female"}
 }
 ```
-  - `counts.*.new` / `update`: rows that would be created, or that already exist for this patient with the same `external_id`
-  - `counts.*.skipped`: rows the mapper produced but MediKeep's validation rejected (listed under `unmapped` with the reason)
+
+- **Response Fields**:
+  - `counts.*.new`: rows that would be created
+  - `counts.*.update`: rows that already exist for this patient with the same `external_id`
+  - `counts.*.skipped`: rows MediKeep's validation rejected (listed under `unmapped` with the reason)
   - `conversion_report`: healthrecord-bridge's per-section report; `null` for FHIR JSON input
-  - `unmapped`: resources that were not imported, grouped by type and reason
+  - `unmapped`: resources not imported, grouped by type and reason
+  - `patient`: demographics found in the file
 - **Error Responses**:
-  - `VAL-422`: no file, unsupported extension, or file over the size limit
-  - `BIZ-400`: the file could not be converted (not a C-CDA document, zip without XML, JSON that is not a Bundle)
-  - `PERM-403`: no edit access to the patient
+  - `400`: File could not be converted (not a C-CDA document, zip without XML, JSON that is not a Bundle)
+  - `403`: No edit access to the patient
+  - `404`: Patient not found
+  - `422`: No file, unsupported extension, or file over the size limit
 
 #### Execute Import
 
 `POST /health-records/import/execute`
 
+- **Purpose**: Write the records to the patient
+- **Authentication**: Yes
 - **Content-Type**: `multipart/form-data`
 - **Form Fields**:
-  - `patient_id` (integer, required)
-  - `file` (file, required)
-  - `update_existing` (boolean, optional, default `true`): when `false`, rows whose `external_id` already exists are left unchanged and counted as skipped
-- **Behavior**: all rows are written in one transaction; on any error nothing is written. One activity-log entry (`entity_type` `patient`, metadata `operation: health_record_import`) records the import. On update, user-owned fields (`tags`, `practitioner_id`, `pharmacy_id`, `condition_id`, `medication_id`) are preserved; mapped fields take the file's values.
+  - `patient_id` (integer, required): Target patient
+  - `file` (file, required): Same file as the preview
+  - `update_existing` (boolean, default: true): When `false`, rows whose `external_id` already exists are counted as skipped and left unchanged
+- **Max Size**: 50MB
 - **Success Response** (200):
+
 ```json
 {
   "source_format": "ccda_xml",
@@ -5262,10 +5272,12 @@ All three endpoints require authentication. Preview and execute take
   "warnings": []
 }
 ```
-- **Error Responses**: as for preview
 
-Imported rows carry `import_source` (`ccda` or `fhir`) and `external_id`, which
-are returned read-only by the regular record endpoints (conditions, allergies,
+- **Error Responses**: As for preview
+- **Note**: All rows are written in one transaction. One activity log entry (entity type `patient`, metadata `operation: health_record_import`) records the import. On update, `tags`, `practitioner_id`, `pharmacy_id`, `condition_id` and `medication_id` are kept; every other mapped field takes the file's value.
+
+Imported rows carry `import_source` (`ccda` or `fhir`) and `external_id`. Both
+are returned read-only by the record endpoints (conditions, allergies,
 medications, immunizations, procedures, encounters, vitals, lab results and lab
 test components).
 

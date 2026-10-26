@@ -1,9 +1,9 @@
-"""Health record import: C-CDA / MyChart XDM / FHIR R4 Bundle to MediKeep records.
+"""
+Health record import (C-CDA, MyChart XDM zip, FHIR R4 Bundle).
 
-``converter`` turns an upload into a FHIR R4 Bundle (via healthrecord-bridge),
-``fhir_mapper`` maps the Bundle's resources onto MediKeep create dicts, and
-``importer`` previews or applies them as idempotent upserts keyed on
-``(patient_id, external_id)``.
+converter.py turns the upload into a FHIR R4 Bundle, fhir_mapper.py maps the
+Bundle onto MediKeep create dicts, and importer.py previews or writes them,
+matching existing rows on (patient_id, external_id).
 """
 
 from app.services.health_record_import.converter import (

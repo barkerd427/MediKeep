@@ -1,4 +1,6 @@
-"""Shared helpers and result types for the FHIR mapper modules."""
+"""
+Result types and small FHIR helpers shared by the mapper modules.
+"""
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
@@ -11,7 +13,7 @@ CanonicalLookup = Callable[[str], Tuple[Optional[str], Optional[str]]]
 
 @dataclass
 class UnmappedItem:
-    """A resource (or part of one) the mapper did not place."""
+    """A resource, or part of one, that was not imported, with the reason."""
 
     resource_type: str
     reason: str
@@ -36,6 +38,7 @@ class MappedRecords:
     warnings: List[str] = field(default_factory=list)
 
     def entity_lists(self) -> Dict[str, List[dict]]:
+        """Mapped rows keyed by entity name, in import order."""
         return {
             "conditions": self.conditions,
             "allergies": self.allergies,
@@ -52,13 +55,14 @@ class MappedRecords:
 
 
 def _codings(concept: Optional[dict]) -> List[dict]:
+    """Coding entries of a CodeableConcept; empty for None or malformed input."""
     if not isinstance(concept, dict):
         return []
     return [c for c in concept.get("coding") or [] if isinstance(c, dict)]
 
 
 def code_for(concept: Optional[dict], *systems: str) -> Optional[str]:
-    """Return the code from the first coding whose system is one of ``systems``."""
+    """Return the code of the first coding in one of the given systems, in priority order."""
     for system in systems:
         for coding in _codings(concept):
             if coding.get("system") == system and coding.get("code"):
@@ -67,7 +71,7 @@ def code_for(concept: Optional[dict], *systems: str) -> Optional[str]:
 
 
 def display_for(concept: Optional[dict]) -> Optional[str]:
-    """Human-readable text for a CodeableConcept: text, then a display, then a code."""
+    """Display text for a CodeableConcept, falling back from text to display to code."""
     if not isinstance(concept, dict):
         return None
     text = concept.get("text")
@@ -83,6 +87,7 @@ def display_for(concept: Optional[dict]) -> Optional[str]:
 
 
 def first_code(concept: Optional[dict]) -> Optional[str]:
+    """Return the first code in a CodeableConcept regardless of system."""
     for coding in _codings(concept):
         if coding.get("code"):
             return str(coding["code"])
@@ -90,7 +95,7 @@ def first_code(concept: Optional[dict]) -> Optional[str]:
 
 
 def parse_date(value) -> Optional[date]:
-    """FHIR date/dateTime/instant (any precision) to a date; None when unusable."""
+    """Parse a FHIR date, dateTime or instant of any precision into a date."""
     if not value or not isinstance(value, str):
         return None
     text = value.strip()
@@ -105,10 +110,11 @@ def parse_date(value) -> Optional[date]:
 
 
 def parse_datetime(value) -> Optional[datetime]:
-    """FHIR dateTime to a datetime.
+    """
+    Parse a FHIR dateTime into a datetime.
 
-    Values with a UTC offset come back as aware UTC datetimes; date-only values
-    and values without an offset come back naive (midnight for dates).
+    Values with an offset are returned as aware UTC datetimes. Date-only
+    values and values without an offset are returned naive.
     """
     if not value or not isinstance(value, str):
         return None
@@ -126,6 +132,7 @@ def parse_datetime(value) -> Optional[datetime]:
 
 
 def truncate(value: Optional[str], limit: int) -> Optional[str]:
+    """Strip and shorten text to a column limit, marking the cut with an ellipsis."""
     if value is None:
         return None
     text = str(value).strip()
@@ -137,7 +144,7 @@ def truncate(value: Optional[str], limit: int) -> Optional[str]:
 def _period_or_datetime(
     resource: dict, base: str
 ) -> Tuple[Optional[str], Optional[str]]:
-    """Return (start, end) strings from ``<base>DateTime`` or ``<base>Period``."""
+    """Return (start, end) strings from the <base>DateTime or <base>Period element."""
     if resource.get(f"{base}DateTime"):
         return resource[f"{base}DateTime"], None
     period = resource.get(f"{base}Period") or {}
@@ -145,36 +152,35 @@ def _period_or_datetime(
 
 
 def _notes(resource: dict) -> Optional[str]:
+    """Join the resource's Annotation texts into one notes string."""
     texts = [n.get("text") for n in resource.get("note") or [] if isinstance(n, dict)]
     joined = "\n".join(t.strip() for t in texts if t and t.strip())
     return truncate(joined, MAX_LEN["notes"]) if joined else None
 
 
 def _ref_id(reference: Optional[dict]) -> Optional[str]:
-    ref = (reference or {}).get("reference") if isinstance(reference, dict) else None
-    if not ref or not isinstance(ref, str):
+    """Resource id from a Reference, accepting "Type/id" and "urn:uuid:id" forms."""
+    ref = reference.get("reference") if isinstance(reference, dict) else None
+    if not ref:
         return None
-    ref = ref.replace("urn:uuid:", "")
+    ref = str(ref).replace("urn:uuid:", "")
     return ref.rsplit("/", 1)[-1] or None
 
 
 def _category_codes(resource: dict) -> List[str]:
+    """Lower-cased category codes and texts of an Observation."""
     codes = []
     for concept in resource.get("category") or []:
         for coding in _codings(concept):
             if coding.get("code"):
                 codes.append(str(coding["code"]).lower())
-        text = (concept or {}).get("text") if isinstance(concept, dict) else None
-        if text:
-            codes.append(str(text).lower())
+        if isinstance(concept, dict) and concept.get("text"):
+            codes.append(str(concept["text"]).lower())
     return codes
 
 
-# --- per-resource mappers ---------------------------------------------------
-
-
 def quantity_of(observation: dict) -> Tuple[Optional[float], Optional[str]]:
-    """Return (value, unit) from ``valueQuantity``; (None, None) when absent or not numeric."""
+    """Return (value, unit) from valueQuantity, or (None, None) if absent or not numeric."""
     quantity = observation.get("valueQuantity")
     if not isinstance(quantity, dict) or quantity.get("value") is None:
         return None, None

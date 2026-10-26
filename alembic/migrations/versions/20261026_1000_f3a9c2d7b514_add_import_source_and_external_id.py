@@ -4,15 +4,10 @@ Revision ID: f3a9c2d7b514
 Revises: d7b2f4a8c615
 Create Date: 2026-10-26 10:00:00.000000
 
-Adds nullable import_source and external_id columns to conditions, allergies,
-medications, immunizations, procedures, encounters, lab_results and
-lab_test_components, plus external_id on vitals (which already has
-import_source). external_id holds the deterministic FHIR resource id produced
-by the health record importer so re-importing the same document updates rows
-in place instead of duplicating them. Each table gets an index on
-import_source and a composite index on (patient_id, external_id); lab test
-components are keyed by lab result, so their composite index is on
-(lab_result_id, external_id).
+Adds import_source and external_id to the record tables the health record
+importer writes, indexed on import_source and (patient_id, external_id).
+lab_test_components is indexed on (lab_result_id, external_id) and vitals,
+which already has import_source, only gets external_id.
 """
 
 from alembic import op
@@ -23,7 +18,6 @@ down_revision = "d7b2f4a8c615"
 branch_labels = None
 depends_on = None
 
-# (table, parent column for the composite index)
 PATIENT_TABLES = [
     "conditions",
     "allergies",
