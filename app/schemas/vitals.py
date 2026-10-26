@@ -241,6 +241,7 @@ class VitalsResponse(VitalsBase):
     id: int
     created_at: datetime
     updated_at: datetime
+    external_id: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

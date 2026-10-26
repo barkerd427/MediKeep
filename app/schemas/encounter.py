@@ -242,6 +242,8 @@ class EncounterResponse(TaggedEntityResponseMixin, EncounterBase):
     patient_id: int
     practitioner_id: Optional[int] = None
     condition_id: Optional[int] = None
+    import_source: Optional[str] = None
+    external_id: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

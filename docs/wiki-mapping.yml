@@ -78,6 +78,10 @@ pages:
     wiki_page: Lab-Result-Parsing
     title: Lab Result PDF Parsing
 
+  - source: docs/health-record-import.md
+    wiki_page: Health-Record-Import
+    title: Health Record Import
+
 # Link transformations
 # Maps internal doc links to wiki page links
 link_mappings:

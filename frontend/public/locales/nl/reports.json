@@ -275,5 +275,54 @@
     "saveModalTitle": "Rapportsjabloon opslaan",
     "updateCurrent": "\"{{name}}\" bijwerken",
     "updateTemplate": "Sjabloon bijwerken"
+  },
+  "healthRecordImport": {
+    "title": "Medisch dossier importeren",
+    "description": "Importeer een Continuity of Care Document (C-CDA XML), het zipbestand dat MyChart maakt wanneer u uw dossier downloadt, of een FHIR R4 Bundle (JSON). Records worden gekoppeld op basis van de identificatoren in het bestand, dus hetzelfde bestand opnieuw importeren werkt bestaande records bij in plaats van ze te dupliceren.",
+    "openButton": "Medisch dossier importeren",
+    "noPatient": "Selecteer een patiënt voordat u importeert.",
+    "file": {
+      "label": "Bestand van het medisch dossier",
+      "placeholder": "Kies een .xml-, .zip- of .json-bestand",
+      "required": "Kies een bestand om te importeren"
+    },
+    "acceptedFormats": "Toegestaan: {{formats}}. Maximale grootte {{size}} MB.",
+    "preview": "Voorbeeld",
+    "previewTitle": "Importvoorbeeld",
+    "back": "Terug",
+    "importButton": "Importeren",
+    "importing": "Medisch dossier wordt geïmporteerd...",
+    "updateExisting": "Eerder geïmporteerde records bijwerken",
+    "updateExistingHint": "Indien uitgeschakeld blijven bestaande records ongewijzigd.",
+    "columns": {
+      "type": "Recordtype",
+      "new": "Nieuw",
+      "update": "Bijwerken",
+      "skipped": "Overgeslagen"
+    },
+    "entities": {
+      "conditions": "Aandoeningen",
+      "allergies": "Allergieën",
+      "medications": "Medicatie",
+      "immunizations": "Vaccinaties",
+      "procedures": "Ingrepen",
+      "encounters": "Bezoeken",
+      "vitals": "Vitale functies",
+      "lab_results": "Labuitslagen",
+      "lab_test_components": "Labtestonderdelen"
+    },
+    "nothingToImport": "Het bestand bevat geen records die MediKeep kan importeren.",
+    "warnings": "Waarschuwingen",
+    "unmapped": "Niet geïmporteerd",
+    "unmappedCount": "{{count}} onderdeel/onderdelen",
+    "sections": "Secties in het bestand",
+    "sectionLine": "{{name}}: {{entries}} vermeldingen, {{resources}} omgezet, {{skipped}} overgeslagen",
+    "patientInFile": "Patiënt in bestand: {{name}}, geboren {{birthDate}}",
+    "resultTitle": "Import voltooid",
+    "resultSummary": "{{created}} aangemaakt, {{updated}} bijgewerkt, {{skipped}} overgeslagen",
+    "errors": {
+      "previewFailed": "Het bestand kon niet worden gelezen",
+      "importFailed": "Import mislukt"
+    }
   }
 }

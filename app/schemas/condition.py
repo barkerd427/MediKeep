@@ -156,6 +156,8 @@ class ConditionUpdate(TaggedEntityUpdateMixin):
 
 class ConditionResponse(TaggedEntityResponseMixin, ConditionBase):
     id: int
+    import_source: Optional[str] = None
+    external_id: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -58,6 +58,11 @@ class Procedure(Base):
         String, nullable=True
     )  # Additional notes about the anesthesia
 
+    # Provenance of imported rows (health record import). external_id is the
+    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
+    import_source = Column(String, nullable=True)
+    external_id = Column(String, nullable=True)
+
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
     updated_at = Column(
@@ -88,7 +93,11 @@ class Procedure(Base):
     )
 
     # Indexes for performance
-    __table_args__ = (Index("idx_procedures_patient_id", "patient_id"),)
+    __table_args__ = (
+        Index("idx_procedures_patient_id", "patient_id"),
+        Index("idx_procedures_import_source", "import_source"),
+        Index("idx_procedures_patient_external_id", "patient_id", "external_id"),
+    )
 
 
 class Treatment(Base):

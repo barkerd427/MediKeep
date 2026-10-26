@@ -79,5 +79,9 @@ pytesseract==0.3.13      # Tesseract OCR wrapper
 # Background task scheduling
 APScheduler>=3.10.0,<4.0.0   # Async scheduler for auto-backups
 
+# Health record import (C-CDA / MyChart XDM to FHIR R4)
+# Becomes a PyPI pin (healthrecord-bridge==0.1.0) once 0.1.0 is published.
+healthrecord-bridge @ git+https://github.com/barkerd427/healthrecord-bridge@main
+
 # Linting (dev tooling)
 pylint==4.0.8

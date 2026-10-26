@@ -303,6 +303,8 @@ JUNCTION TABLES (Many-to-Many)
 | side_effects | String | | Reported side effects (≤1000 chars) |
 | reminder_enabled | Boolean | NOT NULL, DEFAULT false | Whether reminder notifications are active |
 | reminder_times | JSON | | List of facility-local "HH:MM" times (sorted, deduped, max 12) |
+| import_source | String | | Source of an imported row (`ccda`, `fhir`); NULL for manual entries |
+| external_id | String | | Source record id for imported rows (FHIR resource id); NULL for manual entries |
 | created_at | DateTime | NOT NULL | Record creation timestamp |
 | updated_at | DateTime | NOT NULL | Last modification timestamp |
 
@@ -333,6 +335,8 @@ JUNCTION TABLES (Many-to-Many)
 - `idx_medications_patient_status` on (patient_id, status)
 - `idx_medications_patient_type` on (patient_id, medication_type)
 - `idx_medications_reminder_enabled_status` on (reminder_enabled, status) — supports the per-minute reminder scheduler tick
+- `idx_medications_import_source` on import_source
+- `idx_medications_patient_external_id` on (patient_id, external_id)
 
 **Business Rules**:
 - Patient is required, practitioner is optional (OTC medications)
@@ -358,6 +362,8 @@ JUNCTION TABLES (Many-to-Many)
 | icd10_code | String | | ICD-10 diagnosis code |
 | snomed_code | String | | SNOMED CT code |
 | code_description | String | | Medical code description |
+| import_source | String | | Source of an imported row (`ccda`, `fhir`); NULL for manual entries |
+| external_id | String | | Source record id for imported rows (FHIR resource id); NULL for manual entries |
 | tags | JSONB | DEFAULT [] | User tags |
 | created_at | DateTime | NOT NULL | Record creation timestamp |
 | updated_at | DateTime | NOT NULL | Last modification timestamp |
@@ -391,6 +397,8 @@ JUNCTION TABLES (Many-to-Many)
 **Indexes**:
 - `idx_conditions_patient_id` on patient_id
 - `idx_conditions_patient_status` on (patient_id, status)
+- `idx_conditions_import_source` on import_source
+- `idx_conditions_patient_external_id` on (patient_id, external_id)
 
 **Business Rules**:
 - Diagnosis is required field
@@ -415,6 +423,8 @@ JUNCTION TABLES (Many-to-Many)
 | ordered_date | Date | | When test was ordered |
 | completed_date | Date | | When results received |
 | notes | Text | | Additional notes |
+| import_source | String | | Source of an imported row (`ccda`, `fhir`); NULL for manual entries |
+| external_id | String | | Source record id for imported rows (FHIR resource id); NULL for manual entries |
 | tags | JSONB | DEFAULT [] | User tags |
 | created_at | DateTime | | Record creation timestamp |
 | updated_at | DateTime | | Last modification timestamp |
@@ -435,6 +445,8 @@ JUNCTION TABLES (Many-to-Many)
 **Indexes**:
 - `idx_lab_results_patient_id` on patient_id
 - `idx_lab_results_patient_date` on (patient_id, completed_date)
+- `idx_lab_results_import_source` on import_source
+- `idx_lab_results_patient_external_id` on (patient_id, external_id)
 
 **Business Rules**:
 - Status workflow: ordered -> in_progress -> completed
@@ -461,6 +473,8 @@ JUNCTION TABLES (Many-to-Many)
 | display_order | Integer | | Sort order for display |
 | canonical_test_name | String | | Standardized test name for trending |
 | notes | Text | | Component-specific notes |
+| import_source | String | | Source of an imported row (`ccda`, `fhir`); NULL for manual entries |
+| external_id | String | | Source record id for imported rows (FHIR Observation id), scoped to the lab result; NULL for manual entries |
 | created_at | DateTime | NOT NULL | Record creation timestamp |
 | updated_at | DateTime | NOT NULL | Last modification timestamp |
 
@@ -476,6 +490,8 @@ JUNCTION TABLES (Many-to-Many)
 - `idx_lab_test_components_lab_result_category` on (lab_result_id, category)
 - `idx_lab_test_components_test_name_text` on test_name
 - `idx_lab_test_components_abbreviation_text` on abbreviation
+- `idx_lab_test_components_import_source` on import_source
+- `idx_lab_test_components_lab_result_external_id` on (lab_result_id, external_id)
 
 **Business Rules**:
 - Cascade deletes with parent lab_result
@@ -519,6 +535,8 @@ JUNCTION TABLES (Many-to-Many)
 | onset_date | Date | | When first noted |
 | status | String | | AllergyStatus enum value |
 | notes | String | | Additional notes |
+| import_source | String | | Source of an imported row (`ccda`, `fhir`); NULL for manual entries |
+| external_id | String | | Source record id for imported rows (FHIR resource id); NULL for manual entries |
 | tags | JSONB | DEFAULT [] | User tags |
 | created_at | DateTime | NOT NULL | Record creation timestamp |
 | updated_at | DateTime | NOT NULL | Last modification timestamp |
@@ -535,6 +553,8 @@ JUNCTION TABLES (Many-to-Many)
 
 **Indexes**:
 - `idx_allergies_patient_id` on patient_id
+- `idx_allergies_import_source` on import_source
+- `idx_allergies_patient_external_id` on (patient_id, external_id)
 
 **Business Rules**:
 - Allergen and reaction are required
@@ -566,6 +586,8 @@ JUNCTION TABLES (Many-to-Many)
 | notes | Text | | Additional notes |
 | location | String | | Where recorded (home, clinic) |
 | device_used | String | | Measurement device |
+| import_source | String | | Import source key (`dexcom_clarity`, `ccda`, `fhir`); NULL for manual entries |
+| external_id | String | | Source record id for health record imports (one row per effective time); NULL otherwise |
 | created_at | DateTime | NOT NULL | Record creation timestamp |
 | updated_at | DateTime | NOT NULL | Last modification timestamp |
 
@@ -575,6 +597,8 @@ JUNCTION TABLES (Many-to-Many)
 
 **Indexes**:
 - `idx_vitals_patient_id` on patient_id
+- `ix_vitals_import_source` on import_source
+- `idx_vitals_patient_external_id` on (patient_id, external_id)
 
 **Business Rules**:
 - At least one vital measurement required
@@ -602,6 +626,8 @@ JUNCTION TABLES (Many-to-Many)
 | location | String | | Where administered |
 | notes | Text | | Additional notes |
 | tags | JSONB | DEFAULT [] | User tags |
+| import_source | String | | Source of an imported row (`ccda`, `fhir`); NULL for manual entries |
+| external_id | String | | Source record id for imported rows (FHIR resource id); NULL for manual entries |
 | standardized_vaccine_id | Integer | FK(standardized_vaccines.id) ON DELETE SET NULL, NULLABLE | Optional link to the StandardizedVaccine library entry the user picked from the form autocomplete. NULL for free-text records or records created before the vaccine library was introduced. |
 | created_at | DateTime | NOT NULL | Record creation timestamp |
 | updated_at | DateTime | NOT NULL | Last modification timestamp |
@@ -614,6 +640,8 @@ JUNCTION TABLES (Many-to-Many)
 **Indexes**:
 - `idx_immunizations_patient_id` on patient_id
 - `idx_immunizations_standardized_vaccine_id` on standardized_vaccine_id
+- `idx_immunizations_import_source` on import_source
+- `idx_immunizations_patient_external_id` on (patient_id, external_id)
 
 **Business Rules**:
 - Vaccine name and administration date required
@@ -643,6 +671,8 @@ JUNCTION TABLES (Many-to-Many)
 | procedure_duration | Integer | | Duration in minutes |
 | anesthesia_type | String | | local, regional, general |
 | anesthesia_notes | String | | Anesthesia notes |
+| import_source | String | | Source of an imported row (`ccda`, `fhir`); NULL for manual entries |
+| external_id | String | | Source record id for imported rows (FHIR resource id); NULL for manual entries |
 | tags | JSONB | DEFAULT [] | User tags |
 | created_at | DateTime | NOT NULL | Record creation timestamp |
 | updated_at | DateTime | NOT NULL | Last modification timestamp |
@@ -669,6 +699,8 @@ JUNCTION TABLES (Many-to-Many)
 
 **Indexes**:
 - `idx_procedures_patient_id` on patient_id
+- `idx_procedures_import_source` on import_source
+- `idx_procedures_patient_external_id` on (patient_id, external_id)
 
 **Business Rules**:
 - Procedure name and date required
@@ -750,6 +782,8 @@ JUNCTION TABLES (Many-to-Many)
 | duration_minutes | Integer | | Visit duration |
 | location | String | | office, hospital, telehealth |
 | priority | String | | EncounterPriority enum value |
+| import_source | String | | Source of an imported row (`ccda`, `fhir`); NULL for manual entries |
+| external_id | String | | Source record id for imported rows (FHIR resource id); NULL for manual entries |
 | tags | JSONB | DEFAULT [] | User tags |
 | created_at | DateTime | NOT NULL | Record creation timestamp |
 | updated_at | DateTime | NOT NULL | Last modification timestamp |
@@ -766,6 +800,8 @@ JUNCTION TABLES (Many-to-Many)
 
 **Indexes**:
 - `idx_encounters_patient_id` on patient_id
+- `idx_encounters_import_source` on import_source
+- `idx_encounters_patient_external_id` on (patient_id, external_id)
 
 **Business Rules**:
 - Reason and date are required

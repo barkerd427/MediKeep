@@ -275,5 +275,54 @@
     "saveModalTitle": "Berichtvorlage speichern",
     "updateCurrent": "„{{name}}“ aktualisieren",
     "updateTemplate": "Vorlage aktualisieren"
+  },
+  "healthRecordImport": {
+    "title": "Gesundheitsakte importieren",
+    "description": "Importieren Sie ein Continuity of Care Document (C-CDA XML), die ZIP-Datei, die MyChart beim Herunterladen Ihrer Akte erzeugt, oder ein FHIR-R4-Bundle (JSON). Datensätze werden über die Kennungen in der Datei abgeglichen, sodass ein erneuter Import derselben Datei bestehende Einträge aktualisiert statt sie zu duplizieren.",
+    "openButton": "Gesundheitsakte importieren",
+    "noPatient": "Wählen Sie vor dem Import einen Patienten aus.",
+    "file": {
+      "label": "Datei der Gesundheitsakte",
+      "placeholder": "Eine .xml-, .zip- oder .json-Datei auswählen",
+      "required": "Bitte wählen Sie eine Datei zum Importieren"
+    },
+    "acceptedFormats": "Zulässig: {{formats}}. Maximale Größe {{size}} MB.",
+    "preview": "Vorschau",
+    "previewTitle": "Importvorschau",
+    "back": "Zurück",
+    "importButton": "Importieren",
+    "importing": "Gesundheitsakte wird importiert...",
+    "updateExisting": "Zuvor importierte Einträge aktualisieren",
+    "updateExistingHint": "Wenn deaktiviert, bleiben bereits vorhandene Einträge unverändert.",
+    "columns": {
+      "type": "Datensatztyp",
+      "new": "Neu",
+      "update": "Aktualisieren",
+      "skipped": "Übersprungen"
+    },
+    "entities": {
+      "conditions": "Erkrankungen",
+      "allergies": "Allergien",
+      "medications": "Medikamente",
+      "immunizations": "Impfungen",
+      "procedures": "Eingriffe",
+      "encounters": "Besuche",
+      "vitals": "Vitalwerte",
+      "lab_results": "Laborergebnisse",
+      "lab_test_components": "Labortestkomponenten"
+    },
+    "nothingToImport": "Die Datei enthält keine Einträge, die MediKeep importieren kann.",
+    "warnings": "Warnungen",
+    "unmapped": "Nicht importiert",
+    "unmappedCount": "{{count}} Element(e)",
+    "sections": "Abschnitte in der Datei",
+    "sectionLine": "{{name}}: {{entries}} Einträge, {{resources}} umgewandelt, {{skipped}} übersprungen",
+    "patientInFile": "Patient in der Datei: {{name}}, geboren {{birthDate}}",
+    "resultTitle": "Import abgeschlossen",
+    "resultSummary": "{{created}} erstellt, {{updated}} aktualisiert, {{skipped}} übersprungen",
+    "errors": {
+      "previewFailed": "Die Datei konnte nicht gelesen werden",
+      "importFailed": "Import fehlgeschlagen"
+    }
   }
 }

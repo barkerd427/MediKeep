@@ -53,6 +53,11 @@ class LabResult(Base):
     ref_range_max = Column(Float, nullable=True)
     ref_range_text = Column(String, nullable=True)
 
+    # Provenance of imported rows (health record import). external_id is the
+    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
+    import_source = Column(String, nullable=True)
+    external_id = Column(String, nullable=True)
+
     # Audit fields
     created_at = Column(DateTime, nullable=True)
     updated_at = Column(DateTime, nullable=True)
@@ -106,6 +111,8 @@ class LabResult(Base):
     __table_args__ = (
         Index("idx_lab_results_patient_id", "patient_id"),
         Index("idx_lab_results_patient_date", "patient_id", "completed_date"),
+        Index("idx_lab_results_import_source", "import_source"),
+        Index("idx_lab_results_patient_external_id", "patient_id", "external_id"),
     )
 
 
@@ -180,6 +187,11 @@ class LabTestComponent(Base):
     # Notes
     notes = Column(Text, nullable=True)
 
+    # Provenance of imported rows (health record import). external_id is the
+    # deterministic FHIR resource id, scoped to the lab result; NULL for manual entries.
+    import_source = Column(String, nullable=True)
+    external_id = Column(String, nullable=True)
+
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
     updated_at = Column(
@@ -203,6 +215,12 @@ class LabTestComponent(Base):
         ),
         Index("idx_lab_test_components_test_name_text", "test_name"),
         Index("idx_lab_test_components_abbreviation_text", "abbreviation"),
+        Index("idx_lab_test_components_import_source", "import_source"),
+        Index(
+            "idx_lab_test_components_lab_result_external_id",
+            "lab_result_id",
+            "external_id",
+        ),
     )
 
 

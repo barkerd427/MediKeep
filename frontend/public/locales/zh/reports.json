@@ -274,5 +274,54 @@
     "saveModalTitle": "保存报告模板",
     "updateCurrent": "更新 \"{{name}}\"",
     "updateTemplate": "更新模板"
+  },
+  "healthRecordImport": {
+    "title": "导入健康档案",
+    "description": "导入 Continuity of Care Document（C-CDA XML）、MyChart 下载档案时生成的 zip 文件，或 FHIR R4 Bundle（JSON）。记录按文件中的标识符匹配，因此再次导入同一文件会更新现有记录而不是重复创建。",
+    "openButton": "导入健康档案",
+    "noPatient": "导入前请先选择患者。",
+    "file": {
+      "label": "健康档案文件",
+      "placeholder": "选择 .xml、.zip 或 .json 文件",
+      "required": "请选择要导入的文件"
+    },
+    "acceptedFormats": "支持：{{formats}}。最大 {{size}} MB。",
+    "preview": "预览",
+    "previewTitle": "导入预览",
+    "back": "返回",
+    "importButton": "导入",
+    "importing": "正在导入健康档案...",
+    "updateExisting": "更新之前导入的记录",
+    "updateExistingHint": "取消勾选时，已存在的记录保持不变。",
+    "columns": {
+      "type": "记录类型",
+      "new": "新增",
+      "update": "更新",
+      "skipped": "跳过"
+    },
+    "entities": {
+      "conditions": "疾病",
+      "allergies": "过敏",
+      "medications": "药物",
+      "immunizations": "疫苗接种",
+      "procedures": "手术/操作",
+      "encounters": "就诊",
+      "vitals": "生命体征",
+      "lab_results": "化验结果",
+      "lab_test_components": "化验项目"
+    },
+    "nothingToImport": "该文件不包含 MediKeep 可以导入的记录。",
+    "warnings": "警告",
+    "unmapped": "未导入",
+    "unmappedCount": "{{count}} 项",
+    "sections": "文件中的章节",
+    "sectionLine": "{{name}}：{{entries}} 条，已转换 {{resources}} 条，跳过 {{skipped}} 条",
+    "patientInFile": "文件中的患者：{{name}}，出生于 {{birthDate}}",
+    "resultTitle": "导入完成",
+    "resultSummary": "新增 {{created}}，更新 {{updated}}，跳过 {{skipped}}",
+    "errors": {
+      "previewFailed": "无法读取文件",
+      "importFailed": "导入失败"
+    }
   }
 }

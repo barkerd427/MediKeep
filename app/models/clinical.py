@@ -46,6 +46,11 @@ class Medication(Base):
     patient_id = Column(Integer, ForeignKey("patients.id"), nullable=False)
     practitioner_id = Column(Integer, ForeignKey("practitioners.id"), nullable=True)
 
+    # Provenance of imported rows (health record import). external_id is the
+    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
+    import_source = Column(String, nullable=True)
+    external_id = Column(String, nullable=True)
+
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
     updated_at = Column(
@@ -113,6 +118,8 @@ class Medication(Base):
             "reminder_enabled",
             "status",
         ),
+        Index("idx_medications_import_source", "import_source"),
+        Index("idx_medications_patient_external_id", "patient_id", "external_id"),
     )
 
 
@@ -157,6 +164,11 @@ class Encounter(Base):
     priority = Column(
         String, nullable=True
     )  # Use EncounterPriority enum: routine, urgent, emergency
+
+    # Provenance of imported rows (health record import). external_id is the
+    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
+    import_source = Column(String, nullable=True)
+    external_id = Column(String, nullable=True)
 
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
@@ -208,7 +220,11 @@ class Encounter(Base):
     )
 
     # Indexes for performance
-    __table_args__ = (Index("idx_encounters_patient_id", "patient_id"),)
+    __table_args__ = (
+        Index("idx_encounters_patient_id", "patient_id"),
+        Index("idx_encounters_import_source", "import_source"),
+        Index("idx_encounters_patient_external_id", "patient_id", "external_id"),
+    )
 
 
 class Condition(Base):
@@ -239,6 +255,11 @@ class Condition(Base):
     icd10_code = Column(String, nullable=True)  # ICD-10 diagnosis code
     snomed_code = Column(String, nullable=True)  # SNOMED CT code
     code_description = Column(String, nullable=True)  # Description of the medical code
+
+    # Provenance of imported rows (health record import). external_id is the
+    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
+    import_source = Column(String, nullable=True)
+    external_id = Column(String, nullable=True)
 
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
@@ -286,6 +307,8 @@ class Condition(Base):
     __table_args__ = (
         Index("idx_conditions_patient_id", "patient_id"),
         Index("idx_conditions_patient_status", "patient_id", "status"),
+        Index("idx_conditions_import_source", "import_source"),
+        Index("idx_conditions_patient_external_id", "patient_id", "external_id"),
     )
 
 
@@ -317,6 +340,11 @@ class Immunization(Base):
     )  # Where vaccine was administered (clinic, hospital, pharmacy, etc.)
     notes = Column(Text, nullable=True)  # Additional notes
 
+    # Provenance of imported rows (health record import). external_id is the
+    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
+    import_source = Column(String, nullable=True)
+    external_id = Column(String, nullable=True)
+
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
     updated_at = Column(
@@ -347,6 +375,8 @@ class Immunization(Base):
     __table_args__ = (
         Index("idx_immunizations_patient_id", "patient_id"),
         Index("idx_immunizations_standardized_vaccine_id", "standardized_vaccine_id"),
+        Index("idx_immunizations_import_source", "import_source"),
+        Index("idx_immunizations_patient_external_id", "patient_id", "external_id"),
     )
 
 
@@ -413,6 +443,11 @@ class Allergy(Base):
     )  # Use AllergyStatus enum: active, inactive, resolved
     notes = Column(String, nullable=True)  # Additional notes about the allergy
 
+    # Provenance of imported rows (health record import). external_id is the
+    # deterministic FHIR resource id, scoped to the patient; NULL for manual entries.
+    import_source = Column(String, nullable=True)
+    external_id = Column(String, nullable=True)
+
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
     updated_at = Column(
@@ -427,7 +462,11 @@ class Allergy(Base):
     medication = orm_relationship("Medication", back_populates="allergies")
 
     # Indexes for performance
-    __table_args__ = (Index("idx_allergies_patient_id", "patient_id"),)
+    __table_args__ = (
+        Index("idx_allergies_patient_id", "patient_id"),
+        Index("idx_allergies_import_source", "import_source"),
+        Index("idx_allergies_patient_external_id", "patient_id", "external_id"),
+    )
 
 
 class Vitals(Base):
@@ -468,7 +507,10 @@ class Vitals(Base):
     device_used = Column(String, nullable=True)  # Device used for measurement
     import_source = Column(
         String, nullable=True, index=True
-    )  # e.g., "dexcom_clarity"; NULL for manual entries
+    )  # e.g., "dexcom_clarity", "ccda"; NULL for manual entries
+    external_id = Column(
+        String, nullable=True
+    )  # Source record id for health record imports; NULL otherwise
 
     # Audit fields
     created_at = Column(DateTime, default=get_utc_now, nullable=False)
@@ -481,7 +523,10 @@ class Vitals(Base):
     practitioner = orm_relationship("Practitioner", back_populates="vitals")
 
     # Indexes for performance
-    __table_args__ = (Index("idx_vitals_patient_id", "patient_id"),)
+    __table_args__ = (
+        Index("idx_vitals_patient_id", "patient_id"),
+        Index("idx_vitals_patient_external_id", "patient_id", "external_id"),
+    )
 
 
 class Symptom(Base):

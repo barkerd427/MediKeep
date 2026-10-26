@@ -275,5 +275,54 @@
     "saveModalTitle": "Save Report Template",
     "updateCurrent": "Update \"{{name}}\"",
     "updateTemplate": "Update Template"
+  },
+  "healthRecordImport": {
+    "title": "Import health record",
+    "description": "Import a Continuity of Care Document (C-CDA XML), the zip file MyChart produces when you download your record, or a FHIR R4 Bundle (JSON). Records are matched on the identifiers in the file, so importing the same file again updates existing records instead of duplicating them.",
+    "openButton": "Import health record",
+    "noPatient": "Select a patient before importing.",
+    "file": {
+      "label": "Health record file",
+      "placeholder": "Choose a .xml, .zip or .json file",
+      "required": "Please choose a file to import"
+    },
+    "acceptedFormats": "Accepted: {{formats}}. Maximum size {{size}} MB.",
+    "preview": "Preview",
+    "previewTitle": "Import preview",
+    "back": "Back",
+    "importButton": "Import",
+    "importing": "Importing health record...",
+    "updateExisting": "Update records imported earlier",
+    "updateExistingHint": "When unchecked, records that already exist are left unchanged.",
+    "columns": {
+      "type": "Record type",
+      "new": "New",
+      "update": "Update",
+      "skipped": "Skipped"
+    },
+    "entities": {
+      "conditions": "Conditions",
+      "allergies": "Allergies",
+      "medications": "Medications",
+      "immunizations": "Immunizations",
+      "procedures": "Procedures",
+      "encounters": "Visits",
+      "vitals": "Vitals",
+      "lab_results": "Lab results",
+      "lab_test_components": "Lab test components"
+    },
+    "nothingToImport": "The file contains no records that MediKeep can import.",
+    "warnings": "Warnings",
+    "unmapped": "Not imported",
+    "unmappedCount": "{{count}} item(s)",
+    "sections": "Sections in the file",
+    "sectionLine": "{{name}}: {{entries}} entries, {{resources}} converted, {{skipped}} skipped",
+    "patientInFile": "Patient in file: {{name}}, born {{birthDate}}",
+    "resultTitle": "Import complete",
+    "resultSummary": "{{created}} created, {{updated}} updated, {{skipped}} skipped",
+    "errors": {
+      "previewFailed": "The file could not be read",
+      "importFailed": "Import failed"
+    }
   }
 }

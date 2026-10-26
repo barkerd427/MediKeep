@@ -274,5 +274,54 @@
     "savedTemplates": "เทมเพลตที่บันทึกไว้",
     "updateCurrent": "อัปเดต \"{{name}}\"",
     "updateTemplate": "อัปเดตเทมเพลต"
+  },
+  "healthRecordImport": {
+    "title": "นำเข้าประวัติสุขภาพ",
+    "description": "นำเข้าเอกสาร Continuity of Care (C-CDA XML), ไฟล์ zip ที่ MyChart สร้างเมื่อคุณดาวน์โหลดประวัติ หรือ FHIR R4 Bundle (JSON) ระเบียนจะถูกจับคู่ด้วยตัวระบุในไฟล์ ดังนั้นการนำเข้าไฟล์เดิมซ้ำจะอัปเดตระเบียนที่มีอยู่แทนที่จะสร้างซ้ำ",
+    "openButton": "นำเข้าประวัติสุขภาพ",
+    "noPatient": "เลือกผู้ป่วยก่อนนำเข้า",
+    "file": {
+      "label": "ไฟล์ประวัติสุขภาพ",
+      "placeholder": "เลือกไฟล์ .xml, .zip หรือ .json",
+      "required": "กรุณาเลือกไฟล์ที่จะนำเข้า"
+    },
+    "acceptedFormats": "รองรับ: {{formats}} ขนาดสูงสุด {{size}} MB",
+    "preview": "ดูตัวอย่าง",
+    "previewTitle": "ตัวอย่างการนำเข้า",
+    "back": "ย้อนกลับ",
+    "importButton": "นำเข้า",
+    "importing": "กำลังนำเข้าประวัติสุขภาพ...",
+    "updateExisting": "อัปเดตระเบียนที่เคยนำเข้าแล้ว",
+    "updateExistingHint": "หากไม่เลือก ระเบียนที่มีอยู่แล้วจะไม่ถูกเปลี่ยนแปลง",
+    "columns": {
+      "type": "ประเภทระเบียน",
+      "new": "ใหม่",
+      "update": "อัปเดต",
+      "skipped": "ข้าม"
+    },
+    "entities": {
+      "conditions": "โรคประจำตัว",
+      "allergies": "การแพ้",
+      "medications": "ยา",
+      "immunizations": "วัคซีน",
+      "procedures": "หัตถการ",
+      "encounters": "การเข้ารับบริการ",
+      "vitals": "สัญญาณชีพ",
+      "lab_results": "ผลตรวจทางห้องปฏิบัติการ",
+      "lab_test_components": "รายการตรวจทางห้องปฏิบัติการ"
+    },
+    "nothingToImport": "ไฟล์นี้ไม่มีระเบียนที่ MediKeep สามารถนำเข้าได้",
+    "warnings": "คำเตือน",
+    "unmapped": "ไม่ได้นำเข้า",
+    "unmappedCount": "{{count}} รายการ",
+    "sections": "ส่วนต่าง ๆ ในไฟล์",
+    "sectionLine": "{{name}}: {{entries}} รายการ, แปลงแล้ว {{resources}}, ข้าม {{skipped}}",
+    "patientInFile": "ผู้ป่วยในไฟล์: {{name}} เกิดเมื่อ {{birthDate}}",
+    "resultTitle": "นำเข้าเสร็จสิ้น",
+    "resultSummary": "สร้าง {{created}}, อัปเดต {{updated}}, ข้าม {{skipped}}",
+    "errors": {
+      "previewFailed": "ไม่สามารถอ่านไฟล์ได้",
+      "importFailed": "การนำเข้าล้มเหลว"
+    }
   }
 }

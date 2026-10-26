@@ -512,6 +512,8 @@ class LabResultResponse(TaggedEntityResponseMixin, LabResultBase):
     practitioner_id: Optional[int] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    import_source: Optional[str] = None
+    external_id: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

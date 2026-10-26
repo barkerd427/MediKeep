@@ -283,5 +283,54 @@
     "saveModalTitle": "Сохранить шаблон отчёта",
     "updateCurrent": "Обновить \"{{name}}\"",
     "updateTemplate": "Обновить шаблон"
+  },
+  "healthRecordImport": {
+    "title": "Импорт медицинской карты",
+    "description": "Импортируйте документ Continuity of Care (C-CDA XML), zip-файл, который MyChart создаёт при скачивании вашей карты, или FHIR R4 Bundle (JSON). Записи сопоставляются по идентификаторам из файла, поэтому повторный импорт того же файла обновляет существующие записи, а не дублирует их.",
+    "openButton": "Импортировать медицинскую карту",
+    "noPatient": "Перед импортом выберите пациента.",
+    "file": {
+      "label": "Файл медицинской карты",
+      "placeholder": "Выберите файл .xml, .zip или .json",
+      "required": "Выберите файл для импорта"
+    },
+    "acceptedFormats": "Допустимые: {{formats}}. Максимальный размер {{size}} МБ.",
+    "preview": "Предпросмотр",
+    "previewTitle": "Предпросмотр импорта",
+    "back": "Назад",
+    "importButton": "Импортировать",
+    "importing": "Импорт медицинской карты...",
+    "updateExisting": "Обновить ранее импортированные записи",
+    "updateExistingHint": "Если не отмечено, уже существующие записи остаются без изменений.",
+    "columns": {
+      "type": "Тип записи",
+      "new": "Новые",
+      "update": "Обновить",
+      "skipped": "Пропущено"
+    },
+    "entities": {
+      "conditions": "Заболевания",
+      "allergies": "Аллергии",
+      "medications": "Лекарства",
+      "immunizations": "Прививки",
+      "procedures": "Процедуры",
+      "encounters": "Визиты",
+      "vitals": "Показатели жизнедеятельности",
+      "lab_results": "Результаты анализов",
+      "lab_test_components": "Компоненты анализов"
+    },
+    "nothingToImport": "В файле нет записей, которые MediKeep может импортировать.",
+    "warnings": "Предупреждения",
+    "unmapped": "Не импортировано",
+    "unmappedCount": "Элементов: {{count}}",
+    "sections": "Разделы в файле",
+    "sectionLine": "{{name}}: записей {{entries}}, преобразовано {{resources}}, пропущено {{skipped}}",
+    "patientInFile": "Пациент в файле: {{name}}, дата рождения {{birthDate}}",
+    "resultTitle": "Импорт завершён",
+    "resultSummary": "Создано {{created}}, обновлено {{updated}}, пропущено {{skipped}}",
+    "errors": {
+      "previewFailed": "Не удалось прочитать файл",
+      "importFailed": "Импорт не удался"
+    }
   }
 }

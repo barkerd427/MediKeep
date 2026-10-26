@@ -427,6 +427,8 @@ class MedicationResponse(TaggedEntityResponseMixin, MedicationBase):
     id: int
     patient_id: int
     practitioner_id: Optional[int] = None
+    import_source: Optional[str] = None
+    external_id: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

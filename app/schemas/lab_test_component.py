@@ -510,6 +510,8 @@ class LabTestComponentResponse(LabTestComponentBase):
     lab_result_id: int
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
+    import_source: Optional[str] = None
+    external_id: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

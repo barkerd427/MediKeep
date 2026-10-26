@@ -275,5 +275,54 @@
     "saveModalTitle": "Guardar modelo de relatório",
     "updateCurrent": "Atualizar \"{{name}}\"",
     "updateTemplate": "Atualizar Modelo"
+  },
+  "healthRecordImport": {
+    "title": "Importar registo de saúde",
+    "description": "Importe um Continuity of Care Document (XML C-CDA), o ficheiro zip que o MyChart gera ao transferir o seu registo, ou um Bundle FHIR R4 (JSON). Os registos são correspondidos pelos identificadores do ficheiro, pelo que importar o mesmo ficheiro de novo atualiza os registos existentes em vez de os duplicar.",
+    "openButton": "Importar registo de saúde",
+    "noPatient": "Selecione um paciente antes de importar.",
+    "file": {
+      "label": "Ficheiro do registo de saúde",
+      "placeholder": "Escolha um ficheiro .xml, .zip ou .json",
+      "required": "Escolha um ficheiro para importar"
+    },
+    "acceptedFormats": "Aceites: {{formats}}. Tamanho máximo {{size}} MB.",
+    "preview": "Pré-visualizar",
+    "previewTitle": "Pré-visualização da importação",
+    "back": "Voltar",
+    "importButton": "Importar",
+    "importing": "A importar o registo de saúde...",
+    "updateExisting": "Atualizar registos importados anteriormente",
+    "updateExistingHint": "Se desmarcado, os registos já existentes permanecem inalterados.",
+    "columns": {
+      "type": "Tipo de registo",
+      "new": "Novos",
+      "update": "A atualizar",
+      "skipped": "Ignorados"
+    },
+    "entities": {
+      "conditions": "Condições",
+      "allergies": "Alergias",
+      "medications": "Medicamentos",
+      "immunizations": "Vacinas",
+      "procedures": "Procedimentos",
+      "encounters": "Consultas",
+      "vitals": "Sinais vitais",
+      "lab_results": "Resultados laboratoriais",
+      "lab_test_components": "Componentes de análises"
+    },
+    "nothingToImport": "O ficheiro não contém registos que o MediKeep consiga importar.",
+    "warnings": "Avisos",
+    "unmapped": "Não importado",
+    "unmappedCount": "{{count}} item(ns)",
+    "sections": "Secções no ficheiro",
+    "sectionLine": "{{name}}: {{entries}} entradas, {{resources}} convertidas, {{skipped}} ignoradas",
+    "patientInFile": "Paciente no ficheiro: {{name}}, nascido em {{birthDate}}",
+    "resultTitle": "Importação concluída",
+    "resultSummary": "{{created}} criados, {{updated}} atualizados, {{skipped}} ignorados",
+    "errors": {
+      "previewFailed": "Não foi possível ler o ficheiro",
+      "importFailed": "A importação falhou"
+    }
   }
 }

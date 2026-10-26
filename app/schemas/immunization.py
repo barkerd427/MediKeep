@@ -185,6 +185,8 @@ class ImmunizationUpdate(TaggedEntityUpdateMixin):
 
 class ImmunizationResponse(TaggedEntityResponseMixin, ImmunizationBase):
     id: int
+    import_source: Optional[str] = None
+    external_id: Optional[str] = None
     standardized_vaccine_id: Optional[int] = Field(
         None,
         gt=0,

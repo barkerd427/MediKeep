@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useUserPreferences } from '../contexts/UserPreferencesContext';
+import { useCurrentPatient } from '../hooks/useGlobalData';
 import {
   Container,
   Paper,
@@ -30,8 +31,10 @@ import {
   IconAlertTriangle,
   IconCheck,
   IconArchive,
+  IconFileImport,
 } from '@tabler/icons-react';
 import { PageHeader } from '../components';
+import HealthRecordImportModal from '../components/medical/HealthRecordImportModal';
 import { exportService } from '../services/exportService';
 
 // The backend's export scope value doesn't always match the shared:categories
@@ -50,9 +53,11 @@ const ExportPage = () => {
   const navigate = useNavigate();
   const { t, i18n } = useTranslation(['reports', 'common', 'shared']);
   const { unitSystem } = useUserPreferences();
+  const { patient: currentPatient } = useCurrentPatient();
 
   // State management
   const [summary, setSummary] = useState(null);
+  const [importModalOpened, setImportModalOpened] = useState(false);
   const [formats, setFormats] = useState({ formats: [], scopes: [] });
   const [loading, setLoading] = useState(false);
   const [summaryLoading, setSummaryLoading] = useState(true);
@@ -374,6 +379,37 @@ const ExportPage = () => {
             {success}
           </Alert>
         )}
+
+        {/* Import a health record (C-CDA / MyChart / FHIR) */}
+        <Paper shadow="sm" p="xl" radius="md" withBorder>
+          <Group mb="md">
+            <IconFileImport size={20} />
+            <Title order={2}>{t('healthRecordImport.title')}</Title>
+          </Group>
+          <Text size="sm" c="dimmed" mb="md">
+            {t('healthRecordImport.description')}
+          </Text>
+          {!currentPatient?.id && (
+            <Text size="sm" c="orange" mb="md">
+              {t('healthRecordImport.noPatient')}
+            </Text>
+          )}
+          <Button
+            variant="light"
+            leftSection={<IconFileImport size={16} />}
+            onClick={() => setImportModalOpened(true)}
+            disabled={!currentPatient?.id}
+          >
+            {t('healthRecordImport.openButton')}
+          </Button>
+        </Paper>
+
+        <HealthRecordImportModal
+          opened={importModalOpened}
+          onClose={() => setImportModalOpened(false)}
+          patientId={currentPatient?.id ?? null}
+          onImportComplete={() => loadInitialData()}
+        />
 
         {/* Export Mode Toggle */}
         <Paper shadow="sm" p="xl" radius="md" withBorder>

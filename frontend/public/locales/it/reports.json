@@ -275,5 +275,54 @@
     "saveModalTitle": "Salva modello di report",
     "updateCurrent": "Aggiorna \"{{name}}\"",
     "updateTemplate": "Aggiorna modello"
+  },
+  "healthRecordImport": {
+    "title": "Importa cartella clinica",
+    "description": "Importa un Continuity of Care Document (XML C-CDA), il file zip che MyChart genera quando scarichi la tua cartella, oppure un Bundle FHIR R4 (JSON). I record vengono abbinati tramite gli identificativi nel file, quindi importare di nuovo lo stesso file aggiorna i record esistenti invece di duplicarli.",
+    "openButton": "Importa cartella clinica",
+    "noPatient": "Seleziona un paziente prima di importare.",
+    "file": {
+      "label": "File della cartella clinica",
+      "placeholder": "Scegli un file .xml, .zip o .json",
+      "required": "Scegli un file da importare"
+    },
+    "acceptedFormats": "Accettati: {{formats}}. Dimensione massima {{size}} MB.",
+    "preview": "Anteprima",
+    "previewTitle": "Anteprima importazione",
+    "back": "Indietro",
+    "importButton": "Importa",
+    "importing": "Importazione della cartella clinica...",
+    "updateExisting": "Aggiorna i record importati in precedenza",
+    "updateExistingHint": "Se deselezionato, i record già presenti restano invariati.",
+    "columns": {
+      "type": "Tipo di record",
+      "new": "Nuovi",
+      "update": "Da aggiornare",
+      "skipped": "Ignorati"
+    },
+    "entities": {
+      "conditions": "Patologie",
+      "allergies": "Allergie",
+      "medications": "Farmaci",
+      "immunizations": "Vaccinazioni",
+      "procedures": "Procedure",
+      "encounters": "Visite",
+      "vitals": "Parametri vitali",
+      "lab_results": "Risultati di laboratorio",
+      "lab_test_components": "Componenti degli esami"
+    },
+    "nothingToImport": "Il file non contiene record che MediKeep possa importare.",
+    "warnings": "Avvisi",
+    "unmapped": "Non importato",
+    "unmappedCount": "{{count}} elemento/i",
+    "sections": "Sezioni nel file",
+    "sectionLine": "{{name}}: {{entries}} voci, {{resources}} convertite, {{skipped}} ignorate",
+    "patientInFile": "Paziente nel file: {{name}}, nato il {{birthDate}}",
+    "resultTitle": "Importazione completata",
+    "resultSummary": "{{created}} creati, {{updated}} aggiornati, {{skipped}} ignorati",
+    "errors": {
+      "previewFailed": "Impossibile leggere il file",
+      "importFailed": "Importazione non riuscita"
+    }
   }
 }

@@ -275,5 +275,54 @@
     "savedTemplates": "Modèles sauvegardés",
     "updateCurrent": "Mettre à jour \"{{name}}\"",
     "updateTemplate": "Mettre à jour le modèle"
+  },
+  "healthRecordImport": {
+    "title": "Importer un dossier médical",
+    "description": "Importez un Continuity of Care Document (XML C-CDA), le fichier zip produit par MyChart lors du téléchargement de votre dossier, ou un Bundle FHIR R4 (JSON). Les enregistrements sont rapprochés grâce aux identifiants du fichier : réimporter le même fichier met à jour les enregistrements existants au lieu de les dupliquer.",
+    "openButton": "Importer un dossier médical",
+    "noPatient": "Sélectionnez un patient avant d'importer.",
+    "file": {
+      "label": "Fichier du dossier médical",
+      "placeholder": "Choisissez un fichier .xml, .zip ou .json",
+      "required": "Veuillez choisir un fichier à importer"
+    },
+    "acceptedFormats": "Acceptés : {{formats}}. Taille maximale {{size}} Mo.",
+    "preview": "Aperçu",
+    "previewTitle": "Aperçu de l'importation",
+    "back": "Retour",
+    "importButton": "Importer",
+    "importing": "Importation du dossier médical...",
+    "updateExisting": "Mettre à jour les enregistrements importés précédemment",
+    "updateExistingHint": "Si décoché, les enregistrements déjà présents restent inchangés.",
+    "columns": {
+      "type": "Type d'enregistrement",
+      "new": "Nouveaux",
+      "update": "À mettre à jour",
+      "skipped": "Ignorés"
+    },
+    "entities": {
+      "conditions": "Affections",
+      "allergies": "Allergies",
+      "medications": "Médicaments",
+      "immunizations": "Vaccinations",
+      "procedures": "Interventions",
+      "encounters": "Consultations",
+      "vitals": "Constantes vitales",
+      "lab_results": "Résultats de laboratoire",
+      "lab_test_components": "Composants d'analyses"
+    },
+    "nothingToImport": "Le fichier ne contient aucun enregistrement que MediKeep puisse importer.",
+    "warnings": "Avertissements",
+    "unmapped": "Non importé",
+    "unmappedCount": "{{count}} élément(s)",
+    "sections": "Sections du fichier",
+    "sectionLine": "{{name}} : {{entries}} entrées, {{resources}} converties, {{skipped}} ignorées",
+    "patientInFile": "Patient dans le fichier : {{name}}, né(e) le {{birthDate}}",
+    "resultTitle": "Importation terminée",
+    "resultSummary": "{{created}} créés, {{updated}} mis à jour, {{skipped}} ignorés",
+    "errors": {
+      "previewFailed": "Le fichier n'a pas pu être lu",
+      "importFailed": "L'importation a échoué"
+    }
   }
 }

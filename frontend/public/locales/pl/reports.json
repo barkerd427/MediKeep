@@ -283,5 +283,54 @@
     "saveModalTitle": "Zapisz szablon raportu",
     "updateCurrent": "Aktualizuj \"{{name}}\"",
     "updateTemplate": "Aktualizuj szablon"
+  },
+  "healthRecordImport": {
+    "title": "Importuj dokumentację medyczną",
+    "description": "Zaimportuj dokument Continuity of Care (C-CDA XML), plik zip tworzony przez MyChart przy pobieraniu dokumentacji lub pakiet FHIR R4 (JSON). Rekordy są dopasowywane po identyfikatorach z pliku, więc ponowny import tego samego pliku aktualizuje istniejące rekordy zamiast je powielać.",
+    "openButton": "Importuj dokumentację medyczną",
+    "noPatient": "Przed importem wybierz pacjenta.",
+    "file": {
+      "label": "Plik dokumentacji medycznej",
+      "placeholder": "Wybierz plik .xml, .zip lub .json",
+      "required": "Wybierz plik do zaimportowania"
+    },
+    "acceptedFormats": "Akceptowane: {{formats}}. Maksymalny rozmiar {{size}} MB.",
+    "preview": "Podgląd",
+    "previewTitle": "Podgląd importu",
+    "back": "Wstecz",
+    "importButton": "Importuj",
+    "importing": "Importowanie dokumentacji medycznej...",
+    "updateExisting": "Aktualizuj wcześniej zaimportowane rekordy",
+    "updateExistingHint": "Gdy odznaczone, istniejące rekordy pozostają bez zmian.",
+    "columns": {
+      "type": "Typ rekordu",
+      "new": "Nowe",
+      "update": "Do aktualizacji",
+      "skipped": "Pominięte"
+    },
+    "entities": {
+      "conditions": "Schorzenia",
+      "allergies": "Alergie",
+      "medications": "Leki",
+      "immunizations": "Szczepienia",
+      "procedures": "Zabiegi",
+      "encounters": "Wizyty",
+      "vitals": "Parametry życiowe",
+      "lab_results": "Wyniki badań",
+      "lab_test_components": "Składowe badań laboratoryjnych"
+    },
+    "nothingToImport": "Plik nie zawiera rekordów, które MediKeep może zaimportować.",
+    "warnings": "Ostrzeżenia",
+    "unmapped": "Nie zaimportowano",
+    "unmappedCount": "Elementy: {{count}}",
+    "sections": "Sekcje w pliku",
+    "sectionLine": "{{name}}: wpisy {{entries}}, przekonwertowane {{resources}}, pominięte {{skipped}}",
+    "patientInFile": "Pacjent w pliku: {{name}}, ur. {{birthDate}}",
+    "resultTitle": "Import zakończony",
+    "resultSummary": "Utworzono {{created}}, zaktualizowano {{updated}}, pominięto {{skipped}}",
+    "errors": {
+      "previewFailed": "Nie udało się odczytać pliku",
+      "importFailed": "Import nie powiódł się"
+    }
   }
 }

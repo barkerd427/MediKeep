@@ -189,6 +189,8 @@ class ProcedureUpdate(TaggedEntityUpdateMixin):
 
 class ProcedureResponse(TaggedEntityResponseMixin, ProcedureBase):
     id: int
+    import_source: Optional[str] = None
+    external_id: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -102,6 +102,8 @@ class AllergyUpdate(TaggedEntityUpdateMixin):
 
 class AllergyResponse(TaggedEntityResponseMixin, AllergyBase):
     id: int
+    import_source: Optional[str] = None
+    external_id: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

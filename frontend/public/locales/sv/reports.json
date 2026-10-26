@@ -275,5 +275,54 @@
     "saveModalTitle": "Spara rapportmall",
     "updateCurrent": "Uppdatera \"{{name}}\"",
     "updateTemplate": "Uppdatera mall"
+  },
+  "healthRecordImport": {
+    "title": "Importera patientjournal",
+    "description": "Importera ett Continuity of Care Document (C-CDA XML), zip-filen som MyChart skapar när du laddar ner din journal, eller en FHIR R4 Bundle (JSON). Poster matchas mot identifierarna i filen, så att importera samma fil igen uppdaterar befintliga poster i stället för att duplicera dem.",
+    "openButton": "Importera patientjournal",
+    "noPatient": "Välj en patient innan du importerar.",
+    "file": {
+      "label": "Journalfil",
+      "placeholder": "Välj en .xml-, .zip- eller .json-fil",
+      "required": "Välj en fil att importera"
+    },
+    "acceptedFormats": "Tillåtna: {{formats}}. Största storlek {{size}} MB.",
+    "preview": "Förhandsgranska",
+    "previewTitle": "Förhandsgranskning av import",
+    "back": "Tillbaka",
+    "importButton": "Importera",
+    "importing": "Importerar patientjournal...",
+    "updateExisting": "Uppdatera tidigare importerade poster",
+    "updateExistingHint": "Om avmarkerad lämnas poster som redan finns oförändrade.",
+    "columns": {
+      "type": "Posttyp",
+      "new": "Nya",
+      "update": "Uppdatera",
+      "skipped": "Överhoppade"
+    },
+    "entities": {
+      "conditions": "Sjukdomstillstånd",
+      "allergies": "Allergier",
+      "medications": "Läkemedel",
+      "immunizations": "Vaccinationer",
+      "procedures": "Ingrepp",
+      "encounters": "Besök",
+      "vitals": "Vitalparametrar",
+      "lab_results": "Labbresultat",
+      "lab_test_components": "Labbtestkomponenter"
+    },
+    "nothingToImport": "Filen innehåller inga poster som MediKeep kan importera.",
+    "warnings": "Varningar",
+    "unmapped": "Inte importerat",
+    "unmappedCount": "{{count}} objekt",
+    "sections": "Avsnitt i filen",
+    "sectionLine": "{{name}}: {{entries}} poster, {{resources}} konverterade, {{skipped}} överhoppade",
+    "patientInFile": "Patient i filen: {{name}}, född {{birthDate}}",
+    "resultTitle": "Importen är klar",
+    "resultSummary": "{{created}} skapade, {{updated}} uppdaterade, {{skipped}} överhoppade",
+    "errors": {
+      "previewFailed": "Filen kunde inte läsas",
+      "importFailed": "Importen misslyckades"
+    }
   }
 }
