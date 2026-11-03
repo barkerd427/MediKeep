@@ -86,6 +86,8 @@ def _report_notes(report, prefix: str = "") -> List[str]:
     notes = []
     for document in report.documents:
         for unknown in document.unknown_sections:
+            if not unknown.entries:
+                continue
             title = unknown.title or unknown.code or "untitled"
             notes.append(
                 f"{lead}Section '{title}' is not converted yet "

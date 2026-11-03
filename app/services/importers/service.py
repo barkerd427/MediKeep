@@ -168,6 +168,9 @@ class HealthRecordImportService:
                 )
                 continue
             if mapped is None:
+                reason = mapper.skip_reason(resource)
+                if reason and reason not in plan.warnings:
+                    plan.warnings.append(reason)
                 continue
             plan.warnings.extend(f"{mapped.label}: {w}" for w in mapped.warnings)
             plan.rows.append(self._classify(plan, mapped, patient, source, mapper))

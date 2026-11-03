@@ -7,6 +7,7 @@ import io
 import sys
 import zipfile
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -17,7 +18,7 @@ from app.services.importers import (
     ImportFormatError,
     health_record_importer_registry,
 )
-from app.services.importers.ccda_importer import MISSING_LIBRARY_MESSAGE
+from app.services.importers.ccda_importer import MISSING_LIBRARY_MESSAGE, _report_notes
 
 FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "health_record_import"
 MYCHART_CCD = FIXTURES / "mychart_like_ccd.xml"
@@ -97,6 +98,18 @@ class TestToBundle:
             "MedicationStatement",
         } <= (_resource_types(bundle))
         assert any("Plan of Treatment" in n for n in notes)
+
+    def test_report_notes_skip_empty_sections(self):
+        """Test that an unconverted section with no entries makes no note."""
+        unknown = [
+            SimpleNamespace(title="Care Teams", code=None, entries=1),
+            SimpleNamespace(title="Medical Devices", code=None, entries=0),
+        ]
+        document = SimpleNamespace(unknown_sections=unknown, sections=[])
+        report = SimpleNamespace(documents=[document])
+        assert _report_notes(report) == [
+            "Section 'Care Teams' is not converted yet (1 entries)"
+        ]
 
     def test_zip_merges_without_duplicate_ids(self):
         """Test that two copies of a document in one zip yield each resource once."""

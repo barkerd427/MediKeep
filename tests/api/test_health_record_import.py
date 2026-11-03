@@ -938,7 +938,7 @@ class TestEpicFixture:
 
     # Resources the converter produces besides the Patient. The allergies
     # section holds one "no known allergies" entry, which the converter marks
-    # refuted and the mapper drops, so there is no allergy section at all
+    # refuted and the mapper drops with a warning, so there is no allergy section
     TOTAL_RESOURCES = 179
     EXPECTED_NEW = {"condition": 4, "medication": 5}
 
@@ -971,7 +971,9 @@ class TestEpicFixture:
             "The file's birth date 1964-01-01 differs from the selected "
             "patient's 1990-01-01."
         ) in warnings
+        assert "Allergies: file states no known allergies" in warnings
         assert "Section 'Care Teams' is not converted yet (1 entries)" in warnings
+        assert not [w for w in warnings if "(0 entries)" in w]
         assert "Results: 2 skipped (organizer has no codable observations)" in warnings
 
     def test_execute_then_reimport_as_zip(
@@ -991,6 +993,9 @@ class TestEpicFixture:
         assert response.status_code == 200, response.text
         counts = response.json()["counts"]
         assert {k: v["created"] for k, v in counts.items()} == self.EXPECTED_NEW
+        assert (
+            "Allergies: file states no known allergies" in response.json()["warnings"]
+        )
 
         conditions = {c.icd10_code: c for c in _conditions(db_session, patient_id)}
         assert set(conditions) == {"N18.1", "J32.9", "J18.9", "J11.1"}
@@ -1009,6 +1014,15 @@ class TestEpicFixture:
             "oral",
         )
         assert losartan.effective_period_start == date(2025, 3, 7)
+        # Epic writes twice daily as period 0.5 d
+        sertraline = medications["sertraline 50 MG Oral Tablet"]
+        assert sertraline.frequency == "2 times per day"
+        # No timing bounds; authoredOn is the order date, not the start of therapy
+        levothyroxine = medications["levothyroxine sodium 0.1 MG Oral Tablet"]
+        assert levothyroxine.effective_period_start is None
+        assert (
+            medications["atorvastatin 80 MG Oral Tablet"].effective_period_start is None
+        )
         provenance = _provenance(db_session, patient_id)
         assert len(provenance) == 9
         assert {p.source for p in provenance} == {"ccda"}
