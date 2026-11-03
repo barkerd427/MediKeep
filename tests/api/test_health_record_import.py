@@ -8,28 +8,25 @@ from datetime import date
 from pathlib import Path
 from typing import Optional
 
-import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session
 
 from app.crud.patient import patient as patient_crud
 from app.models.activity_log import ActivityLog
-from app.models.models import Condition, ImportProvenance, PatientShare
+from app.models.models import (
+    Allergy,
+    Condition,
+    ImportProvenance,
+    Medication,
+    PatientShare,
+)
 from app.schemas.patient import PatientCreate
 from app.services.importers import upload
-from app.services.importers.mappers import (
-    BaseResourceMapper,
-    MappedRecord,
-    resource_mapper_registry,
-)
 from tests.utils.user import create_random_user, create_user_token_headers
 
-FIXTURE = (
-    Path(__file__).resolve().parent.parent
-    / "fixtures"
-    / "health_record_import"
-    / "fhir_bundle_minimal.json"
-)
+FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "health_record_import"
+FIXTURE = FIXTURES / "fhir_bundle_minimal.json"
+MAPPER_FIXTURE = FIXTURES / "fhir_bundle_mapper.json"
 FORMATS_URL = "/api/v1/health-records/import/formats"
 
 
@@ -55,44 +52,27 @@ def _bundle_with_diagnosis(diagnosis: str) -> bytes:
     return json.dumps(bundle).encode()
 
 
-class ConditionStubMapper(BaseResourceMapper):
-    """Minimal Condition mapper so the pipeline can be exercised without real mappers."""
-
-    RESOURCE_TYPE = "Condition"
-    RECORD_TYPE = "condition"
-    MODEL = Condition
-
-    def map(self, resource, bundle):
-        status = resource["clinicalStatus"]["coding"][0]["code"]
-        diagnosis = resource["code"]["text"]
-        onset = resource.get("onsetDateTime", "")[:10] or None
-        return MappedRecord(
-            record_type=self.RECORD_TYPE,
-            external_id=resource.get("id"),
-            data={
-                "diagnosis": diagnosis,
-                "status": status,
-                "onset_date": date.fromisoformat(onset) if onset else None,
-            },
-            hash_parts=(diagnosis, status, onset),
-            label=diagnosis,
-        )
-
-    def hash_parts_for_row(self, row):
-        onset = row.onset_date.isoformat() if row.onset_date else None
-        return (row.diagnosis, row.status, onset)
-
-
-@pytest.fixture
-def condition_mapper():
-    """Register the stub mapper for one test."""
-    resource_mapper_registry.register(ConditionStubMapper())
-    yield
-    resource_mapper_registry.unregister("Condition")
+def _unsupported_only() -> bytes:
+    """The fixture reduced to its Patient and Observation entries."""
+    bundle = json.loads(FIXTURE.read_text())
+    bundle["entry"] = [
+        e
+        for e in bundle["entry"]
+        if e["resource"]["resourceType"] in ("Patient", "Observation")
+    ]
+    return json.dumps(bundle).encode()
 
 
 def _conditions(db: Session, patient_id: int):
     return db.query(Condition).filter(Condition.patient_id == patient_id).all()
+
+
+def _allergies(db: Session, patient_id: int):
+    return db.query(Allergy).filter(Allergy.patient_id == patient_id).all()
+
+
+def _medications(db: Session, patient_id: int):
+    return db.query(Medication).filter(Medication.patient_id == patient_id).all()
 
 
 def _provenance(db: Session, patient_id: int):
@@ -158,10 +138,10 @@ class TestFormats:
 class TestPreview:
     """Test the preview endpoint."""
 
-    def test_reports_unsupported_without_mappers(
+    def test_counts_supported_and_unsupported(
         self, client: TestClient, user_with_patient, authenticated_headers
     ):
-        """Test that with no mappers every resource is reported as unsupported."""
+        """Test that mapped resources are counted and the rest reported as unsupported."""
         patient_id = user_with_patient["patient"].id
         response = client.post(
             _preview_url(patient_id), files=_upload(), headers=authenticated_headers
@@ -171,12 +151,11 @@ class TestPreview:
         assert body["source"] == "fhir"
         assert body["format_key"] == "fhir_bundle"
         assert body["total_resources"] == 4
-        assert body["counts"] == {}
-        assert body["unsupported"] == {
-            "Condition": 2,
-            "AllergyIntolerance": 1,
-            "Observation": 1,
+        assert body["counts"] == {
+            "condition": {"new": 2, "duplicate": 0, "changed": 0, "edited": 0},
+            "allergy": {"new": 1, "duplicate": 0, "changed": 0, "edited": 0},
         }
+        assert body["unsupported"] == {"Observation": 1}
 
     def test_patient_summary_and_mismatch_warnings(
         self, client: TestClient, user_with_patient, authenticated_headers
@@ -197,25 +176,20 @@ class TestPreview:
         assert "Jane Quinn Sampleton" in body["warnings"][0]
         assert "1980-04-12" in body["warnings"][1]
 
-    def test_counts_new_with_mapper(
+    def test_writes_nothing(
         self,
         client: TestClient,
         db_session: Session,
         user_with_patient,
         authenticated_headers,
-        condition_mapper,
     ):
-        """Test that mapped resources are counted as new and nothing is written."""
+        """Test that a preview creates no rows and no provenance."""
         patient_id = user_with_patient["patient"].id
-        response = client.post(
+        client.post(
             _preview_url(patient_id), files=_upload(), headers=authenticated_headers
         )
-        body = response.json()
-        assert body["counts"] == {
-            "condition": {"new": 2, "duplicate": 0, "changed": 0, "edited": 0}
-        }
-        assert body["unsupported"] == {"AllergyIntolerance": 1, "Observation": 1}
         assert _conditions(db_session, patient_id) == []
+        assert _allergies(db_session, patient_id) == []
         assert _provenance(db_session, patient_id) == []
 
     def test_rejects_wrong_extension(
@@ -302,22 +276,24 @@ class TestPreview:
 class TestExecute:
     """Test the execute endpoint."""
 
-    def test_without_mappers_writes_nothing_but_logs(
+    def test_unsupported_only_writes_nothing_but_logs(
         self,
         client: TestClient,
         db_session: Session,
         user_with_patient,
         authenticated_headers,
     ):
-        """Test that execute with no mappers creates no rows and still logs the import."""
+        """Test that a file with only unsupported resources creates no rows but is logged."""
         patient_id = user_with_patient["patient"].id
         response = client.post(
-            _execute_url(patient_id), files=_upload(), headers=authenticated_headers
+            _execute_url(patient_id),
+            files=_upload(_unsupported_only()),
+            headers=authenticated_headers,
         )
         assert response.status_code == 200, response.text
         body = response.json()
         assert body["counts"] == {}
-        assert body["unsupported"]["Condition"] == 2
+        assert body["unsupported"] == {"Observation": 1}
         assert len(body["import_batch_id"]) == 32
         assert _conditions(db_session, patient_id) == []
         logs = _import_logs(db_session, patient_id)
@@ -331,7 +307,6 @@ class TestExecute:
         db_session: Session,
         user_with_patient,
         authenticated_headers,
-        condition_mapper,
     ):
         """Test that mapped resources become rows with one provenance row each."""
         patient_id = user_with_patient["patient"].id
@@ -347,11 +322,18 @@ class TestExecute:
             "skipped_edited": 0,
         }
 
+        assert body["counts"]["allergy"]["created"] == 1
+
         rows = _conditions(db_session, patient_id)
         assert {r.diagnosis for r in rows} == {"Essential hypertension", "Asthma"}
+        allergy = _allergies(db_session, patient_id)[0]
+        assert (allergy.allergen, allergy.reaction) == ("Penicillin", "Hives")
         provenance = _provenance(db_session, patient_id)
-        assert {p.record_id for p in provenance} == {r.id for r in rows}
-        assert {p.external_id for p in provenance} == {"cond-1", "cond-2"}
+        assert {(p.record_type, p.record_id) for p in provenance} == {
+            *(("condition", r.id) for r in rows),
+            ("allergy", allergy.id),
+        }
+        assert {p.external_id for p in provenance} == {"cond-1", "cond-2", "allergy-1"}
         assert {p.source for p in provenance} == {"fhir"}
         assert {p.import_batch_id for p in provenance} == {body["import_batch_id"]}
 
@@ -361,7 +343,6 @@ class TestExecute:
         db_session: Session,
         user_with_patient,
         authenticated_headers,
-        condition_mapper,
     ):
         """Test that importing the same file twice creates nothing the second time."""
         patient_id = user_with_patient["patient"].id
@@ -384,7 +365,9 @@ class TestExecute:
         )
         assert response.json()["counts"]["condition"]["skipped_duplicate"] == 2
         assert response.json()["counts"]["condition"]["created"] == 0
+        assert response.json()["counts"]["allergy"]["skipped_duplicate"] == 1
         assert len(_conditions(db_session, patient_id)) == 2
+        assert len(_allergies(db_session, patient_id)) == 1
 
     def test_locally_edited_row_is_skipped_by_default(
         self,
@@ -392,7 +375,6 @@ class TestExecute:
         db_session: Session,
         user_with_patient,
         authenticated_headers,
-        condition_mapper,
     ):
         """Test that a row edited in MediKeep shows as changed and is not overwritten."""
         patient_id = user_with_patient["patient"].id
@@ -429,7 +411,6 @@ class TestExecute:
         db_session: Session,
         user_with_patient,
         authenticated_headers,
-        condition_mapper,
     ):
         """Test that skip_edited=false updates the edited row and keeps its notes."""
         patient_id = user_with_patient["patient"].id
@@ -461,7 +442,6 @@ class TestExecute:
         db_session: Session,
         user_with_patient,
         authenticated_headers,
-        condition_mapper,
     ):
         """Test that a changed value in the source file updates the untouched row."""
         patient_id = user_with_patient["patient"].id
@@ -491,7 +471,6 @@ class TestExecute:
         db_session: Session,
         user_with_patient,
         authenticated_headers,
-        condition_mapper,
     ):
         """Test that preview leaves stale provenance alone and execute replaces it."""
         patient_id = user_with_patient["patient"].id
@@ -508,7 +487,7 @@ class TestExecute:
         assert preview["counts"]["condition"]["new"] == 2
         assert not db_session.deleted
         assert not db_session.dirty
-        assert len(_provenance(db_session, patient_id)) == 2
+        assert len(_provenance(db_session, patient_id)) == 3
 
         response = client.post(
             _execute_url(patient_id), files=_upload(), headers=authenticated_headers
@@ -517,7 +496,8 @@ class TestExecute:
         rows = _conditions(db_session, patient_id)
         provenance = _provenance(db_session, patient_id)
         assert len(rows) == 2
-        assert {p.record_id for p in provenance} == {r.id for r in rows}
+        assert len(provenance) == 3
+        assert {r.id for r in rows} <= {p.record_id for p in provenance}
 
     def test_repeated_resource_in_one_file_is_a_duplicate(
         self,
@@ -525,7 +505,6 @@ class TestExecute:
         db_session: Session,
         user_with_patient,
         authenticated_headers,
-        condition_mapper,
     ):
         """Test that two identical id-less resources in one upload create one row."""
         patient_id = user_with_patient["patient"].id
@@ -560,7 +539,6 @@ class TestExecute:
         db_session: Session,
         user_with_patient,
         authenticated_headers,
-        condition_mapper,
     ):
         """Test that a record matched by content under a new source id keeps the new id."""
         patient_id = user_with_patient["patient"].id
@@ -581,6 +559,7 @@ class TestExecute:
         assert {p.external_id for p in _provenance(db_session, patient_id)} == {
             "new-cond-1",
             "new-cond-2",
+            "allergy-1",
         }
 
     def test_sections_filter(
@@ -589,7 +568,6 @@ class TestExecute:
         db_session: Session,
         user_with_patient,
         authenticated_headers,
-        condition_mapper,
     ):
         """Test that a sections list excludes record types not in it."""
         patient_id = user_with_patient["patient"].id
@@ -600,8 +578,9 @@ class TestExecute:
             headers=authenticated_headers,
         )
         assert response.status_code == 200
-        assert response.json()["counts"] == {}
+        assert list(response.json()["counts"]) == ["allergy"]
         assert _conditions(db_session, patient_id) == []
+        assert len(_allergies(db_session, patient_id)) == 1
 
         response = client.post(
             _execute_url(patient_id),
@@ -639,3 +618,189 @@ class TestExecute:
             client.post(_execute_url(patient_id), files=_upload(), headers=headers)
         ).status_code == 200
         assert len(_import_logs(db_session, patient_id)) == 1
+
+
+class TestMapperFixture:
+    """Test the three mappers end to end on the mapper fixture."""
+
+    def test_preview_counts(
+        self, client: TestClient, user_with_patient, authenticated_headers
+    ):
+        """Test per-section counts, skipped resources and the unsupported list."""
+        patient_id = user_with_patient["patient"].id
+        response = client.post(
+            _preview_url(patient_id),
+            files=_upload(MAPPER_FIXTURE.read_bytes()),
+            headers=authenticated_headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        # 11 resources besides the Patient; the error, cancelled and duplicate ones map to nothing
+        assert body["total_resources"] == 11
+        assert body["counts"] == {
+            "condition": {"new": 2, "duplicate": 0, "changed": 0, "edited": 0},
+            "allergy": {"new": 3, "duplicate": 0, "changed": 0, "edited": 0},
+            "medication": {"new": 2, "duplicate": 0, "changed": 0, "edited": 0},
+        }
+        assert body["unsupported"] == {"Observation": 1}
+
+    def test_execute_writes_expected_rows(
+        self,
+        client: TestClient,
+        db_session: Session,
+        user_with_patient,
+        authenticated_headers,
+    ):
+        """Test the values written for each record type."""
+        patient_id = user_with_patient["patient"].id
+        response = client.post(
+            _execute_url(patient_id),
+            files=_upload(MAPPER_FIXTURE.read_bytes()),
+            headers=authenticated_headers,
+        )
+        assert response.status_code == 200, response.text
+        counts = response.json()["counts"]
+        assert counts["condition"]["created"] == 2
+        assert counts["allergy"]["created"] == 3
+        assert counts["medication"]["created"] == 2
+
+        htn = next(
+            r for r in _conditions(db_session, patient_id) if r.icd10_code == "I10"
+        )
+        assert htn.snomed_code == "59621000"
+        assert htn.severity == "moderate"
+        assert htn.notes == "Diagnosed at annual physical."
+        asthma = next(
+            r for r in _conditions(db_session, patient_id) if r.diagnosis == "Asthma"
+        )
+        assert (asthma.status, asthma.onset_date, asthma.end_date) == (
+            "resolved",
+            date(1992, 6, 1),
+            date(2004, 8, 15),
+        )
+
+        allergies = {a.allergen: a for a in _allergies(db_session, patient_id)}
+        assert allergies["Penicillin"].reaction == "Hives, Shortness of breath"
+        assert allergies["Penicillin"].severity == "severe"
+        assert allergies["Peanut"].reaction == "Not specified"
+        assert allergies["Peanut"].severity == "none"
+        assert (allergies["Latex"].severity, allergies["Latex"].status) == (
+            "severe",
+            "inactive",
+        )
+
+        meds = {m.medication_name: m for m in _medications(db_session, patient_id)}
+        lisinopril = meds["Lisinopril 10 MG Oral Tablet"]
+        assert lisinopril.dosage == "Take 1 tablet by mouth once daily"
+        assert lisinopril.route == "oral"
+        assert lisinopril.indication == "Hypertension"
+        albuterol = meds["Albuterol 0.09 MG/ACTUAT Metered Dose Inhaler"]
+        assert (albuterol.dosage, albuterol.frequency) == ("2 puff", "2 times per day")
+        assert albuterol.status == "completed"
+        assert albuterol.effective_period_end == date(2004, 8, 15)
+
+        provenance = _provenance(db_session, patient_id)
+        assert len(provenance) == 7
+        # The statement, not the request, is the lisinopril row's source
+        assert "med-lisinopril" in {p.external_id for p in provenance}
+        assert "rx-lisinopril" not in {p.external_id for p in provenance}
+
+    def test_second_import_is_all_duplicates(
+        self, client: TestClient, user_with_patient, authenticated_headers
+    ):
+        """Test that importing the fixture twice creates nothing the second time."""
+        patient_id = user_with_patient["patient"].id
+        for _ in range(2):
+            response = client.post(
+                _execute_url(patient_id),
+                files=_upload(MAPPER_FIXTURE.read_bytes()),
+                headers=authenticated_headers,
+            )
+        counts = response.json()["counts"]
+        assert {k: v["created"] for k, v in counts.items()} == {
+            "condition": 0,
+            "allergy": 0,
+            "medication": 0,
+        }
+        assert {k: v["skipped_duplicate"] for k, v in counts.items()} == {
+            "condition": 2,
+            "allergy": 3,
+            "medication": 2,
+        }
+
+    def test_edited_allergen_is_skipped(
+        self,
+        client: TestClient,
+        db_session: Session,
+        user_with_patient,
+        authenticated_headers,
+    ):
+        """Test that an allergy renamed in MediKeep is reported as changed and left alone."""
+        patient_id = user_with_patient["patient"].id
+        client.post(
+            _execute_url(patient_id),
+            files=_upload(MAPPER_FIXTURE.read_bytes()),
+            headers=authenticated_headers,
+        )
+        peanut = next(
+            a for a in _allergies(db_session, patient_id) if a.allergen == "Peanut"
+        )
+        peanut.allergen = "Peanuts (all forms)"
+        db_session.commit()
+
+        preview = client.post(
+            _preview_url(patient_id),
+            files=_upload(MAPPER_FIXTURE.read_bytes()),
+            headers=authenticated_headers,
+        ).json()
+        assert preview["counts"]["allergy"] == {
+            "new": 0,
+            "duplicate": 2,
+            "changed": 1,
+            "edited": 1,
+        }
+
+        response = client.post(
+            _execute_url(patient_id),
+            files=_upload(MAPPER_FIXTURE.read_bytes()),
+            headers=authenticated_headers,
+        )
+        assert response.json()["counts"]["allergy"]["skipped_edited"] == 1
+        db_session.refresh(peanut)
+        assert peanut.allergen == "Peanuts (all forms)"
+
+    def test_sections_limits_writes(
+        self,
+        client: TestClient,
+        db_session: Session,
+        user_with_patient,
+        authenticated_headers,
+    ):
+        """Test that sections=condition writes conditions only."""
+        patient_id = user_with_patient["patient"].id
+        response = client.post(
+            _execute_url(patient_id),
+            data={"sections": "condition"},
+            files=_upload(MAPPER_FIXTURE.read_bytes()),
+            headers=authenticated_headers,
+        )
+        assert list(response.json()["counts"]) == ["condition"]
+        assert len(_conditions(db_session, patient_id)) == 2
+        assert _allergies(db_session, patient_id) == []
+        assert _medications(db_session, patient_id) == []
+
+    def test_truncation_warning_is_surfaced(
+        self, client: TestClient, user_with_patient, authenticated_headers
+    ):
+        """Test that a value cut to fit a column shows up in the preview warnings."""
+        patient_id = user_with_patient["patient"].id
+        bundle = json.loads(MAPPER_FIXTURE.read_text())
+        bundle["entry"][1]["resource"]["code"]["text"] = "z" * 600
+        response = client.post(
+            _preview_url(patient_id),
+            files=_upload(json.dumps(bundle).encode()),
+            headers=authenticated_headers,
+        )
+        assert "Condition/cond-htn: diagnosis truncated to 500 characters" in (
+            response.json()["warnings"]
+        )

@@ -5395,6 +5395,22 @@ by registering importers and mappers.
 ```
 - **Notes**: One activity log entry (`imported` / `health_record_import`) is written per call. Duplicates are matched on the source record id first, then on a content hash.
 
+#### Supported Resources
+
+| FHIR resource | Record type | Table |
+|---|---|---|
+| `Condition` | `condition` | `conditions` |
+| `AllergyIntolerance` | `allergy` | `allergies` |
+| `MedicationStatement`, `MedicationRequest` | `medication` | `medications` |
+
+Decisions where the source and the table do not line up:
+
+- Allergies without a reaction are stored with reaction `Not specified`, since the column is required. Severity comes from the first reaction, then from `criticality` (`high` is severe, `low` is mild), else `none`.
+- RxNorm codes are not stored; the medications table has no column for them. Statuses `cancelled` and `entered-in-error` are skipped, `not-taken` becomes `cancelled`, `intended` and `draft` become `active`.
+- A `MedicationRequest` is skipped when the bundle also holds a `MedicationStatement` for the same drug with the same start date, so one prescription does not become two rows.
+- Condition status `remission` becomes `inactive`; an abatement date forces `resolved`. Values longer than a column allows are cut and reported in `warnings`.
+- The content hash covers the fields a person is likely to edit (name or diagnosis, codes, dates, status, and the reaction or dosage), so an edit to any of them marks the row as changed.
+
 ## 13. Integrations
 
 ### 13.1 Paperless-ngx

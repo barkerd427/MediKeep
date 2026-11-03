@@ -4,8 +4,8 @@ Each mapper turns one FHIR resource type into column values for one MediKeep mod
 """
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import Any, Optional, Tuple
+from dataclasses import dataclass, field
+from typing import Any, List, Optional, Tuple
 
 
 @dataclass
@@ -17,6 +17,7 @@ class MappedRecord:
     data: dict
     hash_parts: Tuple[Any, ...]  # Fields that define "the same record"
     label: str  # Short description for messages
+    warnings: List[str] = field(default_factory=list)  # Values changed to fit
 
 
 class BaseResourceMapper(ABC):
