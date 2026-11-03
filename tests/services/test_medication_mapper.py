@@ -190,12 +190,22 @@ class TestMedicationRequestMapper:
         mapped = self.mapper.map(resource, EMPTY)
         assert mapped.data["medication_name"] == "Albuterol 0.09 MG/ACTUAT Inhaler"
 
-    def test_authored_on_when_no_bounds(self):
-        """Test that authoredOn is the start when the timing has no bounds."""
+    def test_no_start_when_no_bounds(self):
+        """Test that authoredOn is not used as the start when the timing has no bounds."""
         resource = _request(dosageInstruction=[{"text": "2 puffs twice daily"}])
         mapped = self.mapper.map(resource, EMPTY)
-        assert mapped.data["effective_period_start"] == date(2003, 1, 10)
+        assert mapped.data["effective_period_start"] is None
+        assert mapped.hash_parts[3] is None
         assert mapped.data["dosage"] == "2 puffs twice daily"
+
+    def test_validity_period_is_start(self):
+        """Test that dispenseRequest.validityPeriod is the start when the timing has no bounds."""
+        resource = _request(
+            dosageInstruction=[{"text": "2 puffs twice daily"}],
+            dispenseRequest={"validityPeriod": {"start": "2003-02-01"}},
+        )
+        mapped = self.mapper.map(resource, EMPTY)
+        assert mapped.data["effective_period_start"] == date(2003, 2, 1)
 
     def test_frequency_wording(self):
         """Test the wording for daily, every N days and timed doses."""
@@ -207,6 +217,9 @@ class TestMedicationRequestMapper:
                 "3 times per day (AC)",
             ),
             ({"frequency": 1, "period": 1, "periodUnit": "h"}, "every hour"),
+            ({"frequency": 1, "period": 0.5, "periodUnit": "d"}, "2 times per day"),
+            ({"frequency": 1, "period": 0.333, "periodUnit": "d"}, "3 times per day"),
+            ({"frequency": 1, "period": 0.25, "periodUnit": "h"}, "4 times per hour"),
         ]
         for repeat, expected in cases:
             resource = _request(dosageInstruction=[{"timing": {"repeat": repeat}}])
