@@ -16,6 +16,8 @@ Records are added to a patient that already exists in MediKeep. The import never
 
 C-CDA and zip support needs the `healthrecord-bridge` package. The Docker image includes it. On a bare install, run `pip install -r requirements-import.txt`; without it only FHIR bundles are accepted.
 
+The test suite includes a synthetic export in Epic's real layout, generated from a real MyChart download with every name, identifier and clinical value replaced, so the importer is exercised against the sections and nesting Epic actually produces.
+
 ---
 
 ## Downloading Your Record from MyChart

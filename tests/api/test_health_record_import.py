@@ -1,6 +1,6 @@
 """
-Test the health record import API endpoints with a hand-written FHIR bundle and
-a MyChart-style C-CDA.
+Test the health record import API endpoints with a hand-written FHIR bundle, a
+MyChart-style C-CDA and a synthetic export in Epic's real layout.
 """
 
 import io
@@ -30,6 +30,7 @@ FIXTURES = Path(__file__).resolve().parent.parent / "fixtures" / "health_record_
 FIXTURE = FIXTURES / "fhir_bundle_minimal.json"
 MAPPER_FIXTURE = FIXTURES / "fhir_bundle_mapper.json"
 MYCHART_CCD = FIXTURES / "mychart_like_ccd.xml"
+EPIC_CCD = FIXTURES / "mychart_epic_synthetic.xml"
 FORMATS_URL = "/api/v1/health-records/import/formats"
 
 
@@ -930,3 +931,102 @@ class TestCcdaFixture:
         )
         assert response.status_code == 400
         assert "entries" in response.text
+
+
+class TestEpicFixture:
+    """Test preview and execute on the synthetic export in Epic's real layout."""
+
+    # Resources the converter produces besides the Patient. The allergies
+    # section holds one "no known allergies" entry, which the converter marks
+    # refuted and the mapper drops, so there is no allergy section at all
+    TOTAL_RESOURCES = 179
+    EXPECTED_NEW = {"condition": 4, "medication": 5}
+
+    def test_preview_xml(
+        self, client: TestClient, user_with_patient, authenticated_headers
+    ):
+        """Test counts, the file's patient, unsupported types and converter notes."""
+        patient_id = user_with_patient["patient"].id
+        response = client.post(
+            _preview_url(patient_id),
+            files=_upload(EPIC_CCD.read_bytes(), "DOC0001.XML"),
+            headers=authenticated_headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert (body["source"], body["format_key"]) == ("ccda", "ccda")
+        assert body["total_resources"] == self.TOTAL_RESOURCES
+        assert {k: v["new"] for k, v in body["counts"].items()} == self.EXPECTED_NEW
+        assert "allergy" not in body["counts"]
+        # Labs, vitals and social history are Observations; lab panels are DiagnosticReports
+        assert body["unsupported"]["Observation"] == 150
+        assert body["unsupported"]["DiagnosticReport"] == 11
+        assert body["patient"] == {
+            "full_name": "Alex Testperson",
+            "birth_date": "1964-01-01",
+            "gender": "other",
+        }
+        warnings = body["warnings"]
+        assert (
+            "The file's birth date 1964-01-01 differs from the selected "
+            "patient's 1990-01-01."
+        ) in warnings
+        assert "Section 'Care Teams' is not converted yet (1 entries)" in warnings
+        assert "Results: 2 skipped (organizer has no codable observations)" in warnings
+
+    def test_execute_then_reimport_as_zip(
+        self,
+        client: TestClient,
+        db_session: Session,
+        user_with_patient,
+        authenticated_headers,
+    ):
+        """Test rows and provenance from the XML, then duplicates from the zip."""
+        patient_id = user_with_patient["patient"].id
+        response = client.post(
+            _execute_url(patient_id),
+            files=_upload(EPIC_CCD.read_bytes(), "DOC0001.XML"),
+            headers=authenticated_headers,
+        )
+        assert response.status_code == 200, response.text
+        counts = response.json()["counts"]
+        assert {k: v["created"] for k, v in counts.items()} == self.EXPECTED_NEW
+
+        conditions = {c.icd10_code: c for c in _conditions(db_session, patient_id)}
+        assert set(conditions) == {"N18.1", "J32.9", "J18.9", "J11.1"}
+        assert conditions["N18.1"].diagnosis == "Chronic kidney disease, stage 1"
+        assert conditions["N18.1"].snomed_code == "431855005"
+        assert conditions["N18.1"].onset_date == date(2024, 1, 17)
+        assert _allergies(db_session, patient_id) == []
+        medications = {
+            m.medication_name: m for m in _medications(db_session, patient_id)
+        }
+        assert len(medications) == 5
+        losartan = medications["losartan potassium 50 MG Oral Tablet"]
+        assert (losartan.dosage, losartan.frequency, losartan.route) == (
+            "50 mg",
+            "daily",
+            "oral",
+        )
+        assert losartan.effective_period_start == date(2025, 3, 7)
+        provenance = _provenance(db_session, patient_id)
+        assert len(provenance) == 9
+        assert {p.source for p in provenance} == {"ccda"}
+        assert len(_import_logs(db_session, patient_id)) == 1
+
+        # The same document inside a MyChart zip carries the same ids
+        response = client.post(
+            _execute_url(patient_id),
+            files=_upload(_xdm_zip(EPIC_CCD.read_bytes()), "MyChart.zip"),
+            headers=authenticated_headers,
+        )
+        assert response.status_code == 200, response.text
+        counts = response.json()["counts"]
+        assert {k: v["created"] for k, v in counts.items()} == {
+            "condition": 0,
+            "medication": 0,
+        }
+        assert {
+            k: v["skipped_duplicate"] for k, v in counts.items()
+        } == self.EXPECTED_NEW
+        assert len(_provenance(db_session, patient_id)) == 9
