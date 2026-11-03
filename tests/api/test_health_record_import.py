@@ -817,6 +817,29 @@ class TestExecute:
         ]
         assert "clinicalStatus" not in response.text
 
+    def test_mapper_attribute_error_is_skipped(
+        self, client: TestClient, user_with_patient, authenticated_headers, monkeypatch
+    ):
+        """Test that a field of the wrong shape skips the resource instead of failing."""
+        patient_id = user_with_patient["patient"].id
+        real_map = resource_mapper_registry.get_mapper("Condition").map
+
+        def wrong_shape(resource, bundle):
+            if resource.get("id") == "cond-1":
+                return "active".get("coding")  # str has no get, like a malformed field
+            return real_map(resource, bundle)
+
+        monkeypatch.setattr(
+            resource_mapper_registry.get_mapper("Condition"), "map", wrong_shape
+        )
+        response = client.post(
+            _preview_url(patient_id), files=_upload(), headers=authenticated_headers
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["counts"]["condition"]["new"] == 1
+        assert "Skipped Condition/cond-1: could not be mapped" in body["warnings"]
+
     def test_hash_match_from_another_source_keeps_its_source_id(
         self,
         client: TestClient,
