@@ -117,7 +117,8 @@ class TestFhirBundleImporter:
         data = json.dumps({"resourceType": "Bundle", "entry": []}).encode()
         importer = FhirBundleImporter()
         assert importer.validate_format(data, "export.json")
-        assert importer.to_bundle(data, "export.json")["entry"] == []
+        bundle, notes = importer.to_bundle(data, "export.json")
+        assert (bundle["entry"], notes) == ([], [])
 
     def test_rejects_wrong_resource_type(self):
         """Test that a non-Bundle resource is rejected."""

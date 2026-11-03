@@ -1,6 +1,7 @@
 """FHIR R4 Bundle importer: a JSON file that is already in the internal format."""
 
 import json
+from typing import List, Tuple
 
 from .base_importer import BaseHealthRecordImporter, ImportFormatError
 
@@ -22,7 +23,7 @@ class FhirBundleImporter(BaseHealthRecordImporter):
         except (ImportFormatError, RecursionError):
             return False
 
-    def to_bundle(self, data: bytes, filename: str) -> dict:
+    def to_bundle(self, data: bytes, filename: str) -> Tuple[dict, List[str]]:
         """Parse the JSON and check that it is a Bundle with an entry list."""
         bundle = self._load(data)
         if bundle.get("resourceType") != "Bundle":
@@ -30,7 +31,7 @@ class FhirBundleImporter(BaseHealthRecordImporter):
         if not isinstance(bundle.get("entry", []), list):
             raise ImportFormatError("Bundle entry is not a list")
         bundle.setdefault("entry", [])
-        return bundle
+        return bundle, []
 
     @staticmethod
     def _load(data: bytes) -> dict:
