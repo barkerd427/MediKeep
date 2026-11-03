@@ -119,7 +119,10 @@ def _frequency_text(timing: Optional[dict]) -> Optional[str]:
     period = repeat.get("period")
     unit = PERIOD_UNITS.get(repeat.get("periodUnit"))
     if period and unit:
-        if freq == 1 and period == 1:
+        if period < 1 and unit in ("day", "hour"):
+            # Epic writes twice daily as period 0.5 d
+            text = f"{round(freq / period)} times per {unit}"
+        elif freq == 1 and period == 1:
             text = "daily" if unit == "day" else f"every {unit}"
         elif freq == 1:
             text = f"every {period:g} {unit}s"
@@ -257,9 +260,8 @@ class MedicationRequestMapper(_MedicationMapper):
             "boundsPeriod"
         ) or {}
         validity = (resource.get("dispenseRequest") or {}).get("validityPeriod") or {}
-        start = (
-            bounds.get("start") or validity.get("start") or resource.get("authoredOn")
-        )
+        # authoredOn is when the order was written, not when therapy began
+        start = bounds.get("start") or validity.get("start")
         end = bounds.get("end") or validity.get("end")
         return f.parse_date(start), f.parse_date(end)
 
