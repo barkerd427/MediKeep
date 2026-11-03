@@ -1302,7 +1302,7 @@ class TestEpicFixture:
     # Resources the converter produces besides the Patient. The allergies
     # section holds one "no known allergies" entry, which the converter marks
     # refuted and the mapper drops with a warning, so there is no allergy section
-    TOTAL_RESOURCES = 179
+    TOTAL_RESOURCES = 180
     EXPECTED_NEW = {"condition": 4, "medication": 5}
 
     def test_preview_xml(
@@ -1322,7 +1322,7 @@ class TestEpicFixture:
         assert {k: v["new"] for k, v in body["counts"].items()} == self.EXPECTED_NEW
         assert "allergy" not in body["counts"]
         # Labs, vitals and social history are Observations; lab panels are DiagnosticReports
-        assert body["unsupported"]["Observation"] == 150
+        assert body["unsupported"]["Observation"] == 151
         assert body["unsupported"]["DiagnosticReport"] == 11
         assert body["patient"] == {
             "full_name": "Alex Testperson",
@@ -1362,7 +1362,7 @@ class TestEpicFixture:
 
         conditions = {c.icd10_code: c for c in _conditions(db_session, patient_id)}
         assert set(conditions) == {"N18.1", "J32.9", "J18.9", "J11.1"}
-        assert conditions["N18.1"].diagnosis == "Chronic kidney disease, stage 1"
+        assert conditions["N18.1"].diagnosis == "Chronic kidney disease stage 1"
         assert conditions["N18.1"].snomed_code == "431855005"
         assert conditions["N18.1"].onset_date == date(2024, 1, 17)
         assert _allergies(db_session, patient_id) == []
