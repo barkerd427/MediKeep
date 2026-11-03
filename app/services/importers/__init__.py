@@ -23,10 +23,12 @@ class HealthRecordImporterRegistry:
     """Registry for health record importers keyed by format."""
 
     def __init__(self):
+        """Create the registry with the built-in importers."""
         self._importers: Dict[str, BaseHealthRecordImporter] = {}
         self._register_defaults()
 
     def _register_defaults(self):
+        """Register the importers that ship with MediKeep."""
         self.register(FhirBundleImporter())
         # C-CDA needs the optional library; without it the format is not offered
         if ccda_available():

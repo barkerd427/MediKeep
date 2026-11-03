@@ -55,6 +55,8 @@ class _PlannedRow:
 
 @dataclass
 class _Plan:
+    """Everything the import would do with one bundle."""
+
     rows: List[_PlannedRow] = field(default_factory=list)
     unsupported: Dict[str, int] = field(default_factory=dict)
     total_resources: int = 0
@@ -67,6 +69,7 @@ class HealthRecordImportService:
     """Preview and execute imports of a FHIR bundle for one patient."""
 
     def __init__(self, db: Session):
+        """Bind the service to a database session."""
         self.db = db
 
     def preview(
@@ -195,7 +198,7 @@ class HealthRecordImportService:
             plan.seen_ids.add(id_key)
 
         existing = prov.find_by_external_id(
-            self.db, patient.id, source, mapped.external_id
+            self.db, patient.id, mapped.record_type, source, mapped.external_id
         ) or prov.find_by_content_hash(
             self.db, patient.id, mapped.record_type, incoming_hash
         )
@@ -240,6 +243,7 @@ class HealthRecordImportService:
     def _create_row(
         self, row: _PlannedRow, patient: Patient, source: str, batch_id: str
     ) -> None:
+        """Insert the record and its provenance, replacing stale provenance."""
         if row.stale is not None:
             self.db.delete(row.stale)
             self.db.flush()
