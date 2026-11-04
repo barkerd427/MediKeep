@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<title>MediKeep sign-in relay</title>
+<link rel="stylesheet" href="relay.css">
+</head>
+<body>
+<main>
+  <h1>MediKeep sign-in relay</h1>
+  <noscript><p>This page needs JavaScript to send your health system's sign-in back to your MediKeep server.</p></noscript>
+
+  <section id="confirm" hidden>
+    <p>Your health system sign-in finished. Send it to this MediKeep server?</p>
+    <p class="host" id="host"></p>
+    <p>Only continue if this is <strong>your own</strong> MediKeep server. Anyone you send this to can read your health records.</p>
+    <label><input type="checkbox" id="rem" checked> Don't ask again for this server on this browser</label>
+    <div class="buttons">
+      <button id="go" type="button">Continue</button>
+      <button id="stop" type="button" class="secondary">That's not my server</button>
+    </div>
+  </section>
+
+  <section id="stopped" hidden>
+    <p>Stopped. Nothing was sent. You can close this tab. If someone sent you a link to get here, don't use it.</p>
+  </section>
+
+  <section id="bad" hidden>
+    <p>This link isn't a valid MediKeep sign-in response. Start again from <em>Connected health systems</em> in your MediKeep.</p>
+  </section>
+</main>
+<script src="relay.js"></script>
+</body>
+</html>
