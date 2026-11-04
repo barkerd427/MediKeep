@@ -12,3 +12,4 @@ label { color: var(--muted); display: block; margin: 1rem 0; }
 button { font: inherit; padding: .5rem 1rem; border-radius: 6px; border: 1px solid var(--accent);
          background: var(--accent); color: #fff; cursor: pointer; }
 button.secondary { background: transparent; color: var(--fg); border-color: var(--border); }
+.warn { border-left: 4px solid #d1242f; padding-left: .75rem; }

@@ -14,13 +14,13 @@
   <noscript><p>This page needs JavaScript to send your health system's sign-in back to your MediKeep server.</p></noscript>
 
   <section id="confirm" hidden>
-    <p>Your health system sign-in finished. Send it to this MediKeep server?</p>
+    <p>Your health system sign-in finished. It is about to be sent to:</p>
     <p class="host" id="host"></p>
-    <p>Only continue if this is <strong>your own</strong> MediKeep server. Anyone you send this to can read your health records.</p>
-    <label><input type="checkbox" id="rem" checked> Don't ask again for this server on this browser</label>
+    <p class="warn">Is that <strong>exactly</strong> the address of your own MediKeep server? Whoever runs that server will be able to read your health records. If you didn't just start "Connect" in your own MediKeep, or you don't recognize this address, stop.</p>
+    <label><input type="checkbox" id="rem"> Don't ask again for this server on this browser</label>
     <div class="buttons">
-      <button id="go" type="button">Continue</button>
-      <button id="stop" type="button" class="secondary">That's not my server</button>
+      <button id="go" type="button" class="secondary">Yes, it's my server</button>
+      <button id="stop" type="button">Stop, that's not mine</button>
     </div>
   </section>
 
