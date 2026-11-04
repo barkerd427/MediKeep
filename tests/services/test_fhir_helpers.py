@@ -27,8 +27,8 @@ class TestFhirHelpers:
         assert f.to_float(True) is None
         assert f.to_float(float("inf")) is None
 
-    def test_bundle_index_is_built_once_per_bundle(self):
-        """Test that lookups hit a cached index and a changed bundle is re-indexed."""
+    def test_bundle_index_is_shared_only_inside_indexed(self):
+        """Test that one index serves a bundle inside indexed() and nothing outlives it."""
         bundle = {
             "resourceType": "Bundle",
             "entry": [
@@ -37,13 +37,14 @@ class TestFhirHelpers:
                 {"resource": {"resourceType": 7, "id": "x"}},
             ],
         }
-        first = f.bundle_index(bundle)
-        assert first is f.bundle_index(bundle)
-        assert (
-            f.find_resource(bundle, "Medication", "m1")
-            is bundle["entry"][0]["resource"]
-        )
-        assert f.find_resource(bundle, "Medication", "m2") is None
-        assert first.by_type == {"Medication": [bundle["entry"][0]["resource"]]}
-        bundle["entry"].append({"resource": {"resourceType": "Medication", "id": "m2"}})
-        assert f.find_resource(bundle, "Medication", "m2") is not None
+        with f.indexed(bundle) as index:
+            assert f.bundle_index(bundle) is index
+            assert f.bundle_index({"entry": []}) is not index
+            assert (
+                f.find_resource(bundle, "Medication", "m1")
+                is bundle["entry"][0]["resource"]
+            )
+            assert f.find_resource(bundle, "Medication", "m2") is None
+            assert index.by_type == {"Medication": [bundle["entry"][0]["resource"]]}
+        assert f._CURRENT.get() is None
+        assert f.bundle_index(bundle) is not index

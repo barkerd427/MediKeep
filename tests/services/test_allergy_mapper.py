@@ -116,6 +116,13 @@ class TestAllergyMapper:
         assert len(mapped.data["allergen"]) == 200
         assert "allergen truncated to 200 characters" in mapped.warnings
 
+    def test_future_onset_is_dropped_and_the_row_kept(self):
+        """Test that an onset after today is dropped with a warning, since the schema rejects it."""
+        mapped = self.mapper.map(_allergy(onsetDateTime="2999-01-01"), BUNDLE)
+        assert mapped is not None
+        assert mapped.data["onset_date"] is None
+        assert mapped.warnings == ["onset date 2999-01-01 is in the future, dropped"]
+
     def test_hash_matches_row(self):
         """Test that a row built from the mapped data hashes the same as the resource."""
         mapped = self.mapper.map(_allergy(), BUNDLE)

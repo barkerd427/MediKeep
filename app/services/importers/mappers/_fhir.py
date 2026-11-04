@@ -2,9 +2,10 @@
 Small FHIR helpers shared by the resource mappers.
 """
 
-from collections import OrderedDict
+from contextlib import contextmanager
+from contextvars import ContextVar
 from datetime import date
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 SNOMED = "http://snomed.info/sct"
 ICD10CM = "http://hl7.org/fhir/sid/icd-10-cm"
@@ -73,6 +74,14 @@ def parse_date(value: Any) -> Optional[date]:
         return None
 
 
+def past_date(value: Optional[date], warnings: List[str], what: str) -> Optional[date]:
+    """Drop a date after today with a warning; the create schemas reject the whole row."""
+    if value is not None and value > date.today():
+        warnings.append(f"{what} {value.isoformat()} is in the future, dropped")
+        return None
+    return value
+
+
 def to_float(value: Any) -> Optional[float]:
     """A finite float from a number or numeric string, else None."""
     if isinstance(value, bool):
@@ -116,7 +125,6 @@ class BundleIndex:
         self.resources: Dict[Tuple[str, str], dict] = {}
         self.by_type: Dict[str, List[dict]] = {}
         self.memo: Dict[str, Any] = {}  # Per-bundle caches owned by the mappers
-        self.entries = len(bundle.get("entry") or [])
         for entry in bundle.get("entry") or []:
             resource = entry.get("resource") if isinstance(entry, dict) else None
             if not isinstance(resource, dict):
@@ -137,23 +145,30 @@ class BundleIndex:
         return self.resources.get((resource_type, str(resource_id)))
 
 
-# The last few bundles seen, keyed by object id; the bundle itself is kept so
-# the id cannot be reused while its index is cached
-_INDEXES: "OrderedDict[int, Tuple[dict, BundleIndex]]" = OrderedDict()
-_INDEX_LIMIT = 4
+# The index of the bundle being planned; set only inside indexed(), so nothing
+# outlives the import that built it
+_CURRENT: ContextVar[Optional[Tuple[dict, BundleIndex]]] = ContextVar(
+    "fhir_bundle_index", default=None
+)
+
+
+@contextmanager
+def indexed(bundle: dict) -> Iterator[BundleIndex]:
+    """Share one BundleIndex across every mapper call made for this bundle."""
+    index = BundleIndex(bundle)
+    token = _CURRENT.set((bundle, index))
+    try:
+        yield index
+    finally:
+        _CURRENT.reset(token)
 
 
 def bundle_index(bundle: dict) -> BundleIndex:
-    """The BundleIndex for a bundle, built on first use and reused while cached."""
-    entries = len(bundle.get("entry") or [])
-    cached = _INDEXES.get(id(bundle))
-    if cached is not None and cached[0] is bundle and cached[1].entries == entries:
-        return cached[1]
-    index = BundleIndex(bundle)
-    _INDEXES[id(bundle)] = (bundle, index)
-    while len(_INDEXES) > _INDEX_LIMIT:
-        _INDEXES.popitem(last=False)
-    return index
+    """The shared index inside indexed(bundle), else a fresh one."""
+    current = _CURRENT.get()
+    if current is not None and current[0] is bundle:
+        return current[1]
+    return BundleIndex(bundle)
 
 
 def find_resource(bundle: dict, resource_type: str, resource_id: str) -> Optional[dict]:

@@ -37,6 +37,8 @@ class ConditionMapper(BaseResourceMapper):
     RECORD_TYPE = "condition"
     MODEL = Condition
     CREATE_SCHEMA = ConditionCreate
+    # condition_name is the user's own label for the diagnosis; the source sets it once
+    preserve_on_update = ("notes", "tags", "condition_name")
 
     def map(self, resource: dict, bundle: dict) -> Optional[MappedRecord]:
         """Map one Condition; None when refuted, in error or without a name."""
@@ -50,8 +52,12 @@ class ConditionMapper(BaseResourceMapper):
 
         warnings: list = []
         label = f"Condition/{resource.get('id', '?')}"
-        onset_date = f.parse_date(f.period(resource, "onset")[0])
-        end_date = f.parse_date(f.period(resource, "abatement")[0])
+        onset_date = f.past_date(
+            f.parse_date(f.period(resource, "onset")[0]), warnings, "onset date"
+        )
+        end_date = f.past_date(
+            f.parse_date(f.period(resource, "abatement")[0]), warnings, "end date"
+        )
         status = CONDITION_STATUS.get(
             f.status_code(resource, "clinicalStatus", f.CONDITION_CLINICAL)
         )
@@ -106,6 +112,7 @@ class ConditionMapper(BaseResourceMapper):
                 data["snomed_code"],
                 data["icd10_code"],
                 diagnosis,
+                data["code_description"],
                 data["severity"],
                 onset_date,
                 end_date,
@@ -121,6 +128,7 @@ class ConditionMapper(BaseResourceMapper):
             row.snomed_code,
             row.icd10_code,
             row.diagnosis,
+            row.code_description,
             row.severity,
             row.onset_date,
             row.end_date,
@@ -129,12 +137,21 @@ class ConditionMapper(BaseResourceMapper):
 
     @staticmethod
     def _parts(
-        snomed, icd10, diagnosis, severity, onset_date, end_date, status
+        snomed,
+        icd10,
+        diagnosis,
+        code_description,
+        severity,
+        onset_date,
+        end_date,
+        status,
     ) -> Tuple[Any, ...]:
         """Normalize the same way from a resource and from a row."""
         return (
-            snomed or icd10 or None,
+            snomed or None,
+            icd10 or None,
             f.norm(diagnosis),
+            f.norm(code_description),
             f.norm(severity),
             f.iso(onset_date),
             f.iso(end_date),
