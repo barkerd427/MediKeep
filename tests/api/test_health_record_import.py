@@ -1317,8 +1317,14 @@ class TestMapperFixture:
             f"Skipped Condition/{condition['id']}: failed validation"
             in body["warnings"]
         )
+        rejected = [
+            record
+            for record in caplog.records
+            if record.getMessage() == "Health record import rejected a mapped resource"
+        ]
+        assert rejected
         assert "catastrophic" not in caplog.text
-        assert all("catastrophic" not in str(vars(record)) for record in caplog.records)
+        assert all("catastrophic" not in str(vars(record)) for record in rejected)
 
     def test_sections_limits_writes(
         self,
@@ -1339,6 +1345,25 @@ class TestMapperFixture:
         assert len(_conditions(db_session, patient_id)) == 2
         assert _allergies(db_session, patient_id) == []
         assert _medications(db_session, patient_id) == []
+
+    def test_warning_overflow_is_counted(
+        self, client: TestClient, user_with_patient, authenticated_headers
+    ):
+        """Test that warnings past the cap are counted rather than silently dropped."""
+        patient_id = user_with_patient["patient"].id
+        bundle = json.loads(MAPPER_FIXTURE.read_text())
+        bundle["entry"].extend({"resource": {"id": f"bad{i}"}} for i in range(60))
+        response = client.post(
+            _preview_url(patient_id),
+            files=_upload(json.dumps(bundle).encode()),
+            headers=authenticated_headers,
+        )
+        warnings = response.json()["warnings"]
+        skipped = [w for w in warnings if w.startswith("Skipped entry")]
+        assert 0 < len(skipped) < 60
+        hidden = int(warnings[-1].split()[0])
+        assert warnings[-1] == f"{hidden} more warnings not shown"
+        assert len(skipped) + hidden >= 60
 
     def test_truncation_warning_is_surfaced(
         self, client: TestClient, user_with_patient, authenticated_headers

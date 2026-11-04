@@ -191,6 +191,19 @@ def fit(
     return text
 
 
+def whole_code(
+    value: Optional[str], limit: int, warnings: List[str], what: str
+) -> Optional[str]:
+    """A code kept whole, or dropped with a warning; a cut code would look real."""
+    if value is None:
+        return None
+    text = str(value).strip()
+    if len(text) > limit:
+        warnings.append(f"{what} longer than {limit} characters, dropped")
+        return None
+    return text or None
+
+
 def norm(value: Optional[str]) -> Optional[str]:
     """Lower-cased, whitespace-collapsed text for hashing, or None."""
     if value is None:

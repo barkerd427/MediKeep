@@ -247,7 +247,7 @@ class TestMedicationRequestMapper:
         resource = _request(dosageInstruction=[{"text": "2 puffs twice daily"}])
         mapped = self.mapper.map(resource, EMPTY)
         assert mapped.data["effective_period_start"] is None
-        assert mapped.hash_parts[3] is None
+        assert mapped.hash_parts[5] is None
         assert mapped.data["dosage"] == "2 puffs twice daily"
 
     def test_validity_period_is_start(self):
@@ -286,6 +286,14 @@ class TestMedicationRequestMapper:
             mapped = self.mapper.map(resource, EMPTY)
             assert mapped.data["frequency"] is None, period
             assert any("dropped" in w for w in mapped.warnings), period
+
+    def test_zero_frequency_is_dropped_with_a_warning(self):
+        """Test that a frequency of zero is not read as once."""
+        repeat = {"frequency": 0, "period": 1, "periodUnit": "d"}
+        resource = _request(dosageInstruction=[{"timing": {"repeat": repeat}}])
+        mapped = self.mapper.map(resource, EMPTY)
+        assert mapped.data["frequency"] is None
+        assert any("zero or less" in w for w in mapped.warnings)
 
     def test_cancelled_and_error_are_skipped(self):
         """Test that cancelled and entered-in-error requests are not mapped."""

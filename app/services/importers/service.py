@@ -219,7 +219,10 @@ class HealthRecordImportService:
         self._load_existing(plan, patient, mapped_items, source)
         for mapped, mapper in mapped_items:
             plan.rows.append(self._classify(plan, mapped, source, mapper))
-        plan.warnings = plan.warnings[:MAX_WARNINGS]
+        if len(plan.warnings) > MAX_WARNINGS:
+            hidden = len(plan.warnings) - MAX_WARNINGS
+            plan.warnings = plan.warnings[:MAX_WARNINGS]
+            plan.warnings.append(f"{hidden} more warnings not shown")
         return plan
 
     def _validate(self, mapped: MappedRecord, mapper: Any, patient: Patient) -> bool:
