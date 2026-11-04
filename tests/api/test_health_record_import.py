@@ -1132,6 +1132,80 @@ class TestMapperFixture:
         db_session.refresh(peanut)
         assert peanut.allergen == "Peanuts (all forms)"
 
+    def test_edited_route_is_skipped(
+        self,
+        client: TestClient,
+        db_session: Session,
+        user_with_patient,
+        authenticated_headers,
+    ):
+        """Test that a medication whose route was changed in MediKeep counts as edited."""
+        patient_id = user_with_patient["patient"].id
+        client.post(
+            _execute_url(patient_id),
+            files=_upload(MAPPER_FIXTURE.read_bytes()),
+            headers=authenticated_headers,
+        )
+        lisinopril = next(
+            m
+            for m in _medications(db_session, patient_id)
+            if m.medication_name.startswith("Lisinopril")
+        )
+        lisinopril.route = "sublingual"
+        db_session.commit()
+
+        preview = client.post(
+            _preview_url(patient_id),
+            files=_upload(MAPPER_FIXTURE.read_bytes()),
+            headers=authenticated_headers,
+        ).json()
+        assert preview["counts"]["medication"] == {
+            "new": 0,
+            "duplicate": 1,
+            "changed": 1,
+            "edited": 1,
+        }
+        response = client.post(
+            _execute_url(patient_id),
+            files=_upload(MAPPER_FIXTURE.read_bytes()),
+            headers=authenticated_headers,
+        )
+        assert response.json()["counts"]["medication"]["skipped_edited"] == 1
+        db_session.refresh(lisinopril)
+        assert lisinopril.route == "sublingual"
+
+    def test_row_failing_the_create_schema_is_skipped(
+        self,
+        client: TestClient,
+        db_session: Session,
+        user_with_patient,
+        authenticated_headers,
+    ):
+        """Test that a condition with an onset in the future is skipped with a warning."""
+        patient_id = user_with_patient["patient"].id
+        bundle = json.loads(MAPPER_FIXTURE.read_text())
+        condition = next(
+            e["resource"]
+            for e in bundle["entry"]
+            if e["resource"]["resourceType"] == "Condition"
+        )
+        condition["onsetDateTime"] = "2999-01-01"
+        condition.pop("abatementDateTime", None)
+        response = client.post(
+            _execute_url(patient_id),
+            files=_upload(json.dumps(bundle).encode()),
+            headers=authenticated_headers,
+        )
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["counts"]["condition"]["created"] == 1
+        assert (
+            f"Skipped Condition/{condition['id']}: failed validation"
+            in body["warnings"]
+        )
+        assert "future" not in " ".join(body["warnings"])
+        assert len(_conditions(db_session, patient_id)) == 1
+
     def test_sections_limits_writes(
         self,
         client: TestClient,

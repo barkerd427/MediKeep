@@ -2,6 +2,7 @@
 Tests for the FHIR MedicationStatement and MedicationRequest mappers.
 """
 
+import time
 from datetime import date
 
 from app.models.clinical import Medication
@@ -12,6 +13,7 @@ from app.services.importers.mappers.medication_mapper import (
 from app.services.importers.provenance import content_hash
 
 RXNORM = "http://www.nlm.nih.gov/research/umls/rxnorm"
+SNOMED = "http://snomed.info/sct"
 EMPTY = {"resourceType": "Bundle", "entry": []}
 
 
@@ -115,10 +117,60 @@ class TestMedicationStatementMapper:
         assert mapped.data["notes"] == f"Sig: {sig}"
         assert "dosage truncated to 50 characters" in mapped.warnings
 
-    def test_unknown_route_text_is_kept(self):
-        """Test that a route MediKeep has no value for is stored as given."""
+    def test_unknown_route_goes_to_notes(self):
+        """Test that a route MediKeep has no value for is left empty and kept in notes."""
         resource = _statement(dosage=[{"route": {"text": "Intravitreal"}}])
-        assert self.mapper.map(resource, EMPTY).data["route"] == "Intravitreal"
+        mapped = self.mapper.map(resource, EMPTY)
+        assert mapped.data["route"] is None
+        assert mapped.data["notes"] == "Route: Intravitreal"
+        assert mapped.warnings == [
+            "route 'Intravitreal' is not in MediKeep's list, kept in notes"
+        ]
+
+    def test_route_codes_and_displays(self):
+        """Test SNOMED route codes and display wordings map onto MediKeep's values."""
+        cases = [
+            ({"coding": [{"system": SNOMED, "code": "26643006"}]}, "oral"),
+            ({"coding": [{"system": SNOMED, "code": "447694001"}]}, "inhalation"),
+            ({"coding": [{"system": SNOMED, "code": "45890007"}]}, "topical"),
+            ({"coding": [{"system": SNOMED, "code": "10547007"}]}, "aural"),
+            ({"text": "Oral route"}, "oral"),
+            ({"text": "Respiratory tract route"}, "inhalation"),
+            ({"coding": [{"display": "Intramuscular route"}]}, "intramuscular"),
+            ({"text": "by mouth"}, "oral"),
+        ]
+        for concept, expected in cases:
+            resource = _statement(dosage=[{"route": concept}])
+            assert self.mapper.map(resource, EMPTY).data["route"] == expected
+
+    def test_string_numbers_are_coerced(self):
+        """Test that a dose or period given as a string still renders."""
+        resource = _statement(
+            dosage=[
+                {
+                    "doseAndRate": [{"doseQuantity": {"value": "5", "unit": "mg"}}],
+                    "timing": {
+                        "repeat": {"frequency": 1, "period": "0.5", "periodUnit": "d"}
+                    },
+                }
+            ]
+        )
+        mapped = self.mapper.map(resource, EMPTY)
+        assert mapped.data["dosage"] == "5 mg"
+        assert mapped.data["frequency"] == "2 times per day"
+
+    def test_unusable_numbers_drop_only_that_field(self):
+        """Test that a dose that is not a number leaves the rest of the row intact."""
+        resource = _statement(
+            dosage=[
+                {
+                    "text": "Take as directed",
+                    "doseAndRate": [{"doseQuantity": {"value": "five", "unit": "mg"}}],
+                }
+            ]
+        )
+        mapped = self.mapper.map(resource, EMPTY)
+        assert mapped.data["dosage"] == "Take as directed"
 
     def test_end_before_start_is_dropped(self):
         """Test that an end date before the start is dropped with a warning."""
@@ -170,7 +222,7 @@ class TestMedicationRequestMapper:
         mapped = self.mapper.map(_request(), EMPTY)
         assert mapped.data["dosage"] == "2 puff"
         assert mapped.data["frequency"] == "2 times per day"
-        assert mapped.data["route"] == "Respiratory tract route"
+        assert mapped.data["route"] == "inhalation"
         assert mapped.data["effective_period_start"] == date(2003, 1, 10)
         assert mapped.data["effective_period_end"] == date(2004, 8, 15)
 
@@ -220,10 +272,20 @@ class TestMedicationRequestMapper:
             ({"frequency": 1, "period": 0.5, "periodUnit": "d"}, "2 times per day"),
             ({"frequency": 1, "period": 0.333, "periodUnit": "d"}, "3 times per day"),
             ({"frequency": 1, "period": 0.25, "periodUnit": "h"}, "4 times per hour"),
+            ({"frequency": 1, "period": 0.4, "periodUnit": "d"}, "3 times per day"),
         ]
         for repeat, expected in cases:
             resource = _request(dosageInstruction=[{"timing": {"repeat": repeat}}])
             assert self.mapper.map(resource, EMPTY).data["frequency"] == expected
+
+    def test_unusable_periods_are_dropped_with_a_warning(self):
+        """Test that tiny, negative and zero periods give no frequency and a warning."""
+        for period in (1e-310, -1, 0):
+            repeat = {"frequency": 1, "period": period, "periodUnit": "d"}
+            resource = _request(dosageInstruction=[{"timing": {"repeat": repeat}}])
+            mapped = self.mapper.map(resource, EMPTY)
+            assert mapped.data["frequency"] is None, period
+            assert any("dropped" in w for w in mapped.warnings), period
 
     def test_cancelled_and_error_are_skipped(self):
         """Test that cancelled and entered-in-error requests are not mapped."""
@@ -260,10 +322,53 @@ class TestMedicationRequestMapper:
         statement.pop("effectivePeriod")
         assert self.mapper.map(_request(), _bundle(statement, _request())) is None
 
+    def test_statement_by_reference_blocks(self):
+        """Test that a statement referencing a Medication with the same RxNorm covers the request."""
+        medication = {
+            "resourceType": "Medication",
+            "id": "albuterol",
+            "code": _concept("745679", "Albuterol HFA"),
+        }
+        statement = _statement(
+            medicationReference={"reference": "Medication/albuterol"},
+            effectivePeriod={"start": "2003-01-10"},
+        )
+        statement.pop("medicationCodeableConcept")
+        bundle = _bundle(medication, statement, _request())
+        assert self.mapper.map(_request(), bundle) is None
+
+    def test_large_bundle_maps_quickly(self):
+        """Test that lookups are indexed, so thousands of statements map in well under a second."""
+        statements = [
+            _statement(
+                id=f"ms{i}",
+                medicationCodeableConcept=None,
+                medicationReference={"reference": f"Medication/missing{i}"},
+            )
+            for i in range(2000)
+        ]
+        for statement in statements:
+            statement.pop("medicationCodeableConcept")
+        requests = [_request(id=f"mr{i}") for i in range(50)]
+        bundle = _bundle(*statements, *requests)
+        started = time.perf_counter()
+        mapped = [self.mapper.map(r, bundle) for r in requests]
+        statement_mapper = MedicationStatementMapper()
+        for statement in statements:
+            statement_mapper.map(statement, bundle)
+        assert time.perf_counter() - started < 3
+        assert all(m is not None for m in mapped)
+        assert mapped[0].data["medication_name"] == "Albuterol Inhaler"
+
     def test_hash_matches_row(self):
         """Test that a row built from the mapped data hashes the same as the resource."""
         mapped = self.mapper.map(_request(), EMPTY)
         row = Medication(patient_id=1, **mapped.data)
         assert content_hash(self.mapper.hash_parts_for_row(row)) == content_hash(
+            mapped.hash_parts
+        )
+        # Every column a re-import overwrites counts as an edit when changed
+        row.route = "nasal"
+        assert content_hash(self.mapper.hash_parts_for_row(row)) != content_hash(
             mapped.hash_parts
         )

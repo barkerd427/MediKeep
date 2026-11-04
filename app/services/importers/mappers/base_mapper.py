@@ -26,6 +26,7 @@ class BaseResourceMapper(ABC):
     RESOURCE_TYPE = "Resource"
     RECORD_TYPE = "record"  # Value of import_provenance.record_type
     MODEL: Any = None  # SQLAlchemy model the rows are written to
+    CREATE_SCHEMA: Any = None  # Pydantic create schema the mapped data must satisfy
 
     # Fields the user owns once a row exists; never overwritten on re-import
     preserve_on_update: Tuple[str, ...] = ("notes", "tags")

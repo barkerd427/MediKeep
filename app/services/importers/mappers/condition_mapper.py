@@ -5,6 +5,7 @@ Maps FHIR Condition resources onto the Condition table.
 from typing import Any, Optional, Tuple
 
 from app.models.clinical import Condition
+from app.schemas.condition import ConditionCreate
 
 from . import _fhir as f
 from .base_mapper import BaseResourceMapper, MappedRecord
@@ -19,6 +20,9 @@ CONDITION_STATUS = {
     "resolved": "resolved",
 }
 SEVERITY_WORDS = ("mild", "moderate", "severe")
+# A ruled-out or erroneous diagnosis is not a condition the patient has
+SKIPPED_VERIFICATION = ("entered-in-error", "refuted")
+NOTED_VERIFICATION = ("provisional", "differential", "unconfirmed")
 
 MAX_DIAGNOSIS = 500
 MAX_ICD10 = 10
@@ -32,10 +36,12 @@ class ConditionMapper(BaseResourceMapper):
     RESOURCE_TYPE = "Condition"
     RECORD_TYPE = "condition"
     MODEL = Condition
+    CREATE_SCHEMA = ConditionCreate
 
     def map(self, resource: dict, bundle: dict) -> Optional[MappedRecord]:
-        """Map one Condition; None for entered-in-error or no diagnosis text."""
-        if f.status_code(resource, "verificationStatus", "") == "entered-in-error":
+        """Map one Condition; None when refuted, in error or without a name."""
+        verification = f.status_code(resource, "verificationStatus", "")
+        if verification in SKIPPED_VERIFICATION:
             return None
         code = resource.get("code")
         diagnosis = f.display_for(code)
@@ -66,6 +72,11 @@ class ConditionMapper(BaseResourceMapper):
             ),
             None,
         )
+        notes_parts = []
+        if verification in NOTED_VERIFICATION:
+            notes_parts.append(f"Verification: {verification}")
+        if f.notes_text(resource):
+            notes_parts.append(f.notes_text(resource))
         diagnosis = f.fit(diagnosis, MAX_DIAGNOSIS, warnings, "diagnosis")
         data = {
             "diagnosis": diagnosis,
@@ -83,28 +94,52 @@ class ConditionMapper(BaseResourceMapper):
             "code_description": f.fit(
                 icd_display, MAX_DIAGNOSIS, warnings, "code text"
             ),
-            "notes": f.fit(f.notes_text(resource), MAX_NOTES, warnings, "notes"),
+            "notes": f.fit(
+                "\n".join(notes_parts) or None, MAX_NOTES, warnings, "notes"
+            ),
         }
         return MappedRecord(
             record_type=self.RECORD_TYPE,
             external_id=resource.get("id"),
             data=data,
             hash_parts=self._parts(
-                data["snomed_code"], data["icd10_code"], diagnosis, onset_date, status
+                data["snomed_code"],
+                data["icd10_code"],
+                diagnosis,
+                data["severity"],
+                onset_date,
+                end_date,
+                status,
             ),
             label=label,
             warnings=warnings,
         )
 
     def hash_parts_for_row(self, row: Any) -> Tuple[Any, ...]:
+        """The same hash_parts, read back from an existing row."""
         return self._parts(
-            row.snomed_code, row.icd10_code, row.diagnosis, row.onset_date, row.status
+            row.snomed_code,
+            row.icd10_code,
+            row.diagnosis,
+            row.severity,
+            row.onset_date,
+            row.end_date,
+            row.status,
         )
 
     @staticmethod
-    def _parts(snomed, icd10, diagnosis, onset_date, status) -> Tuple[Any, ...]:
+    def _parts(
+        snomed, icd10, diagnosis, severity, onset_date, end_date, status
+    ) -> Tuple[Any, ...]:
         """Normalize the same way from a resource and from a row."""
-        return (snomed or icd10 or None, f.norm(diagnosis), f.iso(onset_date), status)
+        return (
+            snomed or icd10 or None,
+            f.norm(diagnosis),
+            f.norm(severity),
+            f.iso(onset_date),
+            f.iso(end_date),
+            status,
+        )
 
     @staticmethod
     def _severity(resource: dict) -> Optional[str]:
