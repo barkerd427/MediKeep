@@ -12,6 +12,20 @@ from .base_mapper import BaseResourceMapper, MappedRecord
 ALLERGY_STATUS = {"active": "active", "inactive": "inactive", "resolved": "resolved"}
 CRITICALITY_SEVERITY = {"low": "mild", "high": "severe"}
 
+# SNOMED codes for a kind of allergy rather than a substance; a C-CDA "no known
+# allergies" entry carries one of these and arrives refuted
+ALLERGY_KIND_CODES = {
+    "419199007",  # allergy to substance
+    "416098002",  # drug allergy
+    "414285001",  # food allergy
+    "426232007",  # environmental allergy
+    "716186003",  # no known allergy
+    "409137002",  # no known drug allergy
+    "429625007",  # no known food allergy
+    "428607008",  # no known environmental allergy
+}
+NO_KNOWN_ALLERGIES = "Allergies: file states no known allergies"
+
 # The column is required; this is what an import writes when the file has no reaction
 NO_REACTION = "Not specified"
 
@@ -64,6 +78,15 @@ class AllergyMapper(BaseResourceMapper):
             label=f"AllergyIntolerance/{resource.get('id', '?')}",
             warnings=warnings,
         )
+
+    def skip_reason(self, resource: dict) -> Optional[str]:
+        """A refuted allergy with no substance code is a "no known allergies" statement."""
+        if f.status_code(resource, "verificationStatus", "") != "refuted":
+            return None
+        code = f.code_for(resource.get("code"), f.SNOMED)
+        if resource.get("code") and code not in ALLERGY_KIND_CODES:
+            return None
+        return NO_KNOWN_ALLERGIES
 
     def hash_parts_for_row(self, row: Any) -> Tuple[Any, ...]:
         return self._parts(row.allergen, row.reaction, row.onset_date, row.status)

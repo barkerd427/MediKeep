@@ -5,11 +5,16 @@ Tests for the FHIR AllergyIntolerance mapper.
 from datetime import date
 
 from app.models.clinical import Allergy
-from app.services.importers.mappers.allergy_mapper import NO_REACTION, AllergyMapper
+from app.services.importers.mappers.allergy_mapper import (
+    NO_KNOWN_ALLERGIES,
+    NO_REACTION,
+    AllergyMapper,
+)
 from app.services.importers.provenance import content_hash
 
 CLINICAL = "http://terminology.hl7.org/CodeSystem/allergyintolerance-clinical"
 VERIFICATION = "http://terminology.hl7.org/CodeSystem/allergyintolerance-verification"
+SNOMED = "http://snomed.info/sct"
 BUNDLE = {"resourceType": "Bundle", "entry": []}
 
 
@@ -102,6 +107,16 @@ class TestAllergyMapper:
         for code in ("refuted", "entered-in-error"):
             resource = _allergy(verificationStatus=_status(code, VERIFICATION))
             assert self.mapper.map(resource, BUNDLE) is None
+
+    def test_no_known_allergies_gives_a_skip_reason(self):
+        """Test that a refuted entry coded as a kind of allergy reports no known allergies."""
+        refuted = _status("refuted", VERIFICATION)
+        for code in ({"coding": [{"system": SNOMED, "code": "419199007"}]}, None):
+            resource = _allergy(verificationStatus=refuted, code=code)
+            assert self.mapper.map(resource, BUNDLE) is None
+            assert self.mapper.skip_reason(resource) == NO_KNOWN_ALLERGIES
+        assert self.mapper.skip_reason(_allergy(verificationStatus=refuted)) is None
+        assert self.mapper.skip_reason(_allergy()) is None
 
     def test_without_name_is_skipped(self):
         """Test that an allergy without a code is not mapped."""
