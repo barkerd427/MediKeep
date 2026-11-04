@@ -218,9 +218,11 @@ def whole_code(
     """
     for system in systems:
         for coding in codings(concept):
-            if coding.get("system") != system or not coding.get("code"):
+            if coding.get("system") != system or coding.get("code") is None:
                 continue
             text = str(coding["code"]).strip()
+            if not text:
+                continue
             if len(text) <= limit:
                 return text
             warnings.append(f"{what} longer than {limit} characters, dropped")
