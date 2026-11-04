@@ -6,11 +6,13 @@ from datetime import date
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+from pydantic import ValidationError
+
 from app.models.clinical import Medication
 from app.schemas.medication import MedicationCreate
 
 from . import _fhir as f
-from .base_mapper import BaseResourceMapper, MappedRecord
+from .base_mapper import MAPPING_ERRORS, BaseResourceMapper, MappedRecord
 
 STATEMENT_STATUS = {
     "active": "active",
@@ -113,7 +115,7 @@ def medication_name(resource: dict, bundle: dict) -> Optional[str]:
     for contained in resource.get("contained") or []:
         if isinstance(contained, dict) and contained.get("id") == target_id:
             return f.display_for(contained.get("code"))
-    target = f.find_resource(bundle, "Medication", target_id) if target_id else None
+    target = f.resolve(bundle, "Medication", reference)
     if target:
         return f.display_for(target.get("code"))
     return str(reference.get("display")).strip() if reference.get("display") else None
@@ -124,11 +126,12 @@ def medication_code(resource: dict, bundle: dict) -> Optional[str]:
     code = f.code_for(resource.get("medicationCodeableConcept"), f.RXNORM)
     if code:
         return code
-    target_id = f.ref_id(resource.get("medicationReference"))
+    reference = resource.get("medicationReference")
+    target_id = f.ref_id(reference)
     for contained in resource.get("contained") or []:
         if isinstance(contained, dict) and contained.get("id") == target_id:
             return f.code_for(contained.get("code"), f.RXNORM)
-    target = f.find_resource(bundle, "Medication", target_id) if target_id else None
+    target = f.resolve(bundle, "Medication", reference)
     return f.code_for(target.get("code"), f.RXNORM) if target else None
 
 
@@ -399,7 +402,7 @@ class MedicationRequestMapper(_MedicationMapper):
             if str(other.get("status") or "").lower() in SKIPPED_STATUS:
                 continue
             key = self._drug_key(other, bundle)
-            if key is None:
+            if key is None or not _usable_statement(other, bundle):
                 continue
             other_start = f.parse_date(f.period(other, "effective")[0])
             starts.setdefault(key, set()).add(other_start)
@@ -412,3 +415,15 @@ class MedicationRequestMapper(_MedicationMapper):
         return medication_code(resource, bundle) or f.norm(
             medication_name(resource, bundle)
         )
+
+
+def _usable_statement(statement: dict, bundle: dict) -> bool:
+    """True when the statement will itself be imported, so it may stand in for a request."""
+    try:
+        mapped = MedicationStatementMapper().map(statement, bundle)
+        if mapped is None:
+            return False
+        MedicationCreate.model_validate({**mapped.data, "patient_id": 0})
+    except (ValidationError, *MAPPING_ERRORS):
+        return False
+    return True

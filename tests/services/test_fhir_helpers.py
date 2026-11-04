@@ -41,10 +41,12 @@ class TestFhirHelpers:
             assert f.bundle_index(bundle) is index
             assert f.bundle_index({"entry": []}) is not index
             assert (
-                f.find_resource(bundle, "Medication", "m1")
+                f.resolve(bundle, "Medication", {"reference": "Medication/m1"})
                 is bundle["entry"][0]["resource"]
             )
-            assert f.find_resource(bundle, "Medication", "m2") is None
+            assert (
+                f.resolve(bundle, "Medication", {"reference": "Medication/m2"}) is None
+            )
             assert index.by_type == {"Medication": [bundle["entry"][0]["resource"]]}
         assert f._CURRENT.get() is None
         assert f.bundle_index(bundle) is not index
