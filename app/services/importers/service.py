@@ -38,6 +38,8 @@ NEW = "new"
 DUPLICATE = "duplicate"
 CHANGED = "changed"
 
+MAX_WARNINGS = 50
+
 
 @dataclass
 class _PlannedRow:
@@ -185,11 +187,13 @@ class HealthRecordImportService:
                 continue
             if mapped is None:
                 continue
+            plan.warnings.extend(f"{mapped.label}: {w}" for w in mapped.warnings)
             mapped_items.append((mapped, mapper))
 
         self._load_existing(plan, patient, mapped_items, source)
         for mapped, mapper in mapped_items:
             plan.rows.append(self._classify(plan, mapped, source, mapper))
+        plan.warnings = plan.warnings[:MAX_WARNINGS]
         return plan
 
     def _load_existing(
