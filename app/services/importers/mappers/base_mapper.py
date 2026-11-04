@@ -7,6 +7,16 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, List, Optional, Tuple
 
+# What a mapper may raise on malformed input; the service skips the resource
+MAPPING_ERRORS = (
+    AttributeError,
+    KeyError,
+    IndexError,
+    ValueError,
+    TypeError,
+    ArithmeticError,
+)
+
 
 @dataclass
 class MappedRecord:

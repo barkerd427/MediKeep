@@ -314,6 +314,43 @@ class TestMedicationRequestMapper:
         )
         assert self.mapper.map(_request(), _bundle(statement, _request())) is None
 
+    def test_statement_that_fails_validation_does_not_block(self):
+        """Test that a statement the import would reject cannot stand in for the request."""
+        statement = _statement(
+            medicationCodeableConcept=_concept("745679", "A"),
+            effectivePeriod={"start": "2003-01-10"},
+        )
+        assert self.mapper.map(_request(), _bundle(statement, _request())) is not None
+
+    def test_reference_resolves_by_exact_full_url(self):
+        """Test that an absolute reference picks the entry with that fullUrl, not the first id match."""
+        bundle = {
+            "resourceType": "Bundle",
+            "entry": [
+                {
+                    "fullUrl": "https://a.example/fhir/Medication/m1",
+                    "resource": {
+                        "resourceType": "Medication",
+                        "id": "m1",
+                        "code": _concept("1", "Wrong Drug"),
+                    },
+                },
+                {
+                    "fullUrl": "https://b.example/fhir/Medication/m1",
+                    "resource": {
+                        "resourceType": "Medication",
+                        "id": "m1",
+                        "code": _concept("2", "Right Drug"),
+                    },
+                },
+            ],
+        }
+        resource = _request(
+            medicationReference={"reference": "https://b.example/fhir/Medication/m1"}
+        )
+        resource.pop("medicationCodeableConcept")
+        assert self.mapper.map(resource, bundle).data["medication_name"] == "Right Drug"
+
     def test_statement_with_other_start_does_not_block(self):
         """Test that a statement with a different start date leaves the request in."""
         statement = _statement(

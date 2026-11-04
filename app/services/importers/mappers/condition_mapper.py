@@ -92,10 +92,10 @@ class ConditionMapper(BaseResourceMapper):
             "onset_date": onset_date,
             "end_date": end_date,
             "icd10_code": f.whole_code(
-                f.code_for(code, f.ICD10CM, f.ICD10), MAX_ICD10, warnings, "ICD-10 code"
+                code, (f.ICD10CM, f.ICD10), MAX_ICD10, warnings, "ICD-10 code"
             ),
             "snomed_code": f.whole_code(
-                f.code_for(code, f.SNOMED), MAX_SNOMED, warnings, "SNOMED code"
+                code, (f.SNOMED,), MAX_SNOMED, warnings, "SNOMED code"
             ),
             "code_description": f.fit(
                 icd_display, MAX_DIAGNOSIS, warnings, "code text"

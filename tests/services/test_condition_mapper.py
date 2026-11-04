@@ -167,6 +167,10 @@ class TestConditionMapper:
         mapped = self.mapper.map(resource, BUNDLE)
         assert mapped.data["snomed_code"] is None
         assert mapped.data["icd10_code"] is None
+        resource["code"]["coding"].append(
+            {"system": "http://hl7.org/fhir/sid/icd-10", "code": "I10"}
+        )
+        assert self.mapper.map(resource, BUNDLE).data["icd10_code"] == "I10"
         assert "SNOMED code longer than 20 characters, dropped" in mapped.warnings
         assert "ICD-10 code longer than 10 characters, dropped" in mapped.warnings
 

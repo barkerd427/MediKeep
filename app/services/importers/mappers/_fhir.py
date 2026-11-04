@@ -123,6 +123,7 @@ class BundleIndex:
     def __init__(self, bundle: dict):
         """Walk the bundle once."""
         self.resources: Dict[Tuple[str, str], dict] = {}
+        self.by_url: Dict[str, dict] = {}
         self.by_type: Dict[str, List[dict]] = {}
         self.memo: Dict[str, Any] = {}  # Per-bundle caches owned by the mappers
         for entry in bundle.get("entry") or []:
@@ -137,6 +138,9 @@ class BundleIndex:
                 self.resources.setdefault(
                     (resource_type, str(resource["id"])), resource
                 )
+            full_url = entry.get("fullUrl")
+            if isinstance(full_url, str) and full_url:
+                self.by_url.setdefault(full_url, resource)
 
     def get(self, resource_type: str, resource_id: Any) -> Optional[dict]:
         """A resource by type and id, or None."""
@@ -171,9 +175,18 @@ def bundle_index(bundle: dict) -> BundleIndex:
     return BundleIndex(bundle)
 
 
-def find_resource(bundle: dict, resource_type: str, resource_id: str) -> Optional[dict]:
-    """A bundle entry by type and id, or None."""
-    return bundle_index(bundle).get(resource_type, resource_id)
+def resolve(
+    bundle: dict, resource_type: str, reference: Optional[dict]
+) -> Optional[dict]:
+    """The bundle entry a Reference points to: its exact fullUrl first, then type and id."""
+    ref = reference.get("reference") if isinstance(reference, dict) else None
+    if not ref:
+        return None
+    index = bundle_index(bundle)
+    by_url = index.by_url.get(str(ref))
+    if by_url is not None:
+        return by_url if by_url.get("resourceType") == resource_type else None
+    return index.get(resource_type, ref_id(reference))
 
 
 def fit(
@@ -192,16 +205,26 @@ def fit(
 
 
 def whole_code(
-    value: Optional[str], limit: int, warnings: List[str], what: str
+    concept: Optional[dict],
+    systems: Tuple[str, ...],
+    limit: int,
+    warnings: List[str],
+    what: str,
 ) -> Optional[str]:
-    """A code kept whole, or dropped with a warning; a cut code would look real."""
-    if value is None:
-        return None
-    text = str(value).strip()
-    if len(text) > limit:
-        warnings.append(f"{what} longer than {limit} characters, dropped")
-        return None
-    return text or None
+    """First code in the given systems, in priority order, that fits whole.
+
+    A code is never cut, since a shortened code would look real; one that is too
+    long is passed over with a warning.
+    """
+    for system in systems:
+        for coding in codings(concept):
+            if coding.get("system") != system or not coding.get("code"):
+                continue
+            text = str(coding["code"]).strip()
+            if len(text) <= limit:
+                return text
+            warnings.append(f"{what} longer than {limit} characters, dropped")
+    return None
 
 
 def norm(value: Optional[str]) -> Optional[str]:
