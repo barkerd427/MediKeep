@@ -27,6 +27,7 @@ from app.models.models import (
 )
 from app.schemas.patient import PatientCreate
 from app.services.importers import upload
+from app.services.importers.mappers import _fhir as f
 from app.services.importers.mappers import resource_mapper_registry
 from app.services.importers.service import HealthRecordImportService
 from tests.utils.user import create_random_user, create_user_token_headers
@@ -1149,6 +1150,65 @@ class TestMapperFixture:
         db_session.refresh(peanut)
         assert peanut.allergen == "Peanuts (all forms)"
 
+    def test_update_keeps_user_owned_fields(
+        self,
+        client: TestClient,
+        db_session: Session,
+        user_with_patient,
+        authenticated_headers,
+    ):
+        """Test that a source update leaves the user's condition name and medication type alone."""
+        patient_id = user_with_patient["patient"].id
+        bundle = json.loads(MAPPER_FIXTURE.read_text())
+        client.post(
+            _execute_url(patient_id),
+            files=_upload(json.dumps(bundle).encode()),
+            headers=authenticated_headers,
+        )
+        condition = next(
+            e["resource"]
+            for e in bundle["entry"]
+            if e["resource"]["resourceType"] == "Condition"
+        )
+        lisinopril = next(
+            m
+            for m in _medications(db_session, patient_id)
+            if m.medication_name.startswith("Lisinopril")
+        )
+        row = next(
+            c
+            for c in _conditions(db_session, patient_id)
+            if c.diagnosis == f.display_for(condition["code"])
+        )
+        row.condition_name = "My own label"
+        lisinopril.medication_type = "otc"
+        db_session.commit()
+
+        condition["code"]["text"] = "Renamed in the source"
+        statement = next(
+            e["resource"]
+            for e in bundle["entry"]
+            if e["resource"]
+            .get("medicationCodeableConcept", {})
+            .get("text", "")
+            .startswith("Lisinopril")
+        )
+        statement["dosage"][0]["text"] = "Take 2 tablets by mouth once daily"
+        response = client.post(
+            _execute_url(patient_id),
+            files=_upload(json.dumps(bundle).encode()),
+            headers=authenticated_headers,
+        )
+        counts = response.json()["counts"]
+        assert counts["condition"]["updated"] == 1
+        assert counts["medication"]["updated"] == 1
+        db_session.refresh(row)
+        db_session.refresh(lisinopril)
+        assert row.diagnosis == "Renamed in the source"
+        assert row.condition_name == "My own label"
+        assert lisinopril.dosage == "Take 2 tablets by mouth once daily"
+        assert lisinopril.medication_type == "otc"
+
     def test_edited_route_is_skipped(
         self,
         client: TestClient,
@@ -1191,14 +1251,14 @@ class TestMapperFixture:
         db_session.refresh(lisinopril)
         assert lisinopril.route == "sublingual"
 
-    def test_row_failing_the_create_schema_is_skipped(
+    def test_future_date_is_dropped_and_the_row_kept(
         self,
         client: TestClient,
         db_session: Session,
         user_with_patient,
         authenticated_headers,
     ):
-        """Test that a condition with an onset in the future is skipped with a warning."""
+        """Test that a condition with an onset in the future keeps its row without the date."""
         patient_id = user_with_patient["patient"].id
         bundle = json.loads(MAPPER_FIXTURE.read_text())
         condition = next(
@@ -1215,13 +1275,50 @@ class TestMapperFixture:
         )
         assert response.status_code == 200, response.text
         body = response.json()
-        assert body["counts"]["condition"]["created"] == 1
+        assert body["counts"]["condition"]["created"] == 2
+        assert any(
+            "onset date 2999-01-01 is in the future, dropped" in w
+            for w in body["warnings"]
+        )
+        rows = _conditions(db_session, patient_id)
+        assert len(rows) == 2
+        assert all(row.onset_date != date(2999, 1, 1) for row in rows)
+
+    def test_row_failing_the_create_schema_is_skipped(
+        self,
+        client: TestClient,
+        db_session: Session,
+        user_with_patient,
+        authenticated_headers,
+        monkeypatch,
+        caplog,
+    ):
+        """Test that a row the create schema rejects is skipped and its value never logged."""
+        patient_id = user_with_patient["patient"].id
+        condition_mapper = resource_mapper_registry.get_mapper("Condition")
+        monkeypatch.setattr(
+            condition_mapper, "_severity", staticmethod(lambda resource: "catastrophic")
+        )
+        bundle = json.loads(MAPPER_FIXTURE.read_text())
+        condition = next(
+            e["resource"]
+            for e in bundle["entry"]
+            if e["resource"]["resourceType"] == "Condition"
+        )
+        with caplog.at_level("WARNING"):
+            response = client.post(
+                _execute_url(patient_id),
+                files=_upload(json.dumps(bundle).encode()),
+                headers=authenticated_headers,
+            )
+        assert response.status_code == 200, response.text
+        body = response.json()
         assert (
             f"Skipped Condition/{condition['id']}: failed validation"
             in body["warnings"]
         )
-        assert "future" not in " ".join(body["warnings"])
-        assert len(_conditions(db_session, patient_id)) == 1
+        assert "catastrophic" not in caplog.text
+        assert all("catastrophic" not in str(vars(record)) for record in caplog.records)
 
     def test_sections_limits_writes(
         self,

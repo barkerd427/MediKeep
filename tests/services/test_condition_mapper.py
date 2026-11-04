@@ -117,6 +117,20 @@ class TestConditionMapper:
         assert mapped.data["end_date"] is None
         assert mapped.warnings == ["abatement before onset, end date dropped"]
 
+    def test_future_dates_are_dropped_and_the_row_kept(self):
+        """Test that onset and end dates after today are dropped, since the schema rejects them."""
+        mapped = self.mapper.map(
+            _condition(onsetDateTime="2999-01-01", abatementDateTime="2999-06-01"),
+            BUNDLE,
+        )
+        assert mapped.data["onset_date"] is None
+        assert mapped.data["end_date"] is None
+        assert mapped.data["status"] == "active"
+        assert mapped.warnings == [
+            "onset date 2999-01-01 is in the future, dropped",
+            "end date 2999-06-01 is in the future, dropped",
+        ]
+
     def test_severity_and_notes(self):
         """Test severity from its display text and notes joined from annotations."""
         resource = _condition(
@@ -176,7 +190,14 @@ class TestConditionMapper:
             mapped.hash_parts
         )
         row.diagnosis = mapped.data["diagnosis"]
-        row.severity = "severe"
-        assert content_hash(self.mapper.hash_parts_for_row(row)) != content_hash(
-            mapped.hash_parts
-        )
+        for field_name, value in (
+            ("severity", "severe"),
+            ("icd10_code", "I15"),
+            ("code_description", "Edited by hand"),
+        ):
+            original = getattr(row, field_name)
+            setattr(row, field_name, value)
+            assert content_hash(self.mapper.hash_parts_for_row(row)) != content_hash(
+                mapped.hash_parts
+            ), field_name
+            setattr(row, field_name, original)

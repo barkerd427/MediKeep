@@ -2,10 +2,10 @@
 Tests for the FHIR MedicationStatement and MedicationRequest mappers.
 """
 
-import time
 from datetime import date
 
 from app.models.clinical import Medication
+from app.services.importers.mappers import _fhir as f
 from app.services.importers.mappers.medication_mapper import (
     MedicationRequestMapper,
     MedicationStatementMapper,
@@ -337,8 +337,8 @@ class TestMedicationRequestMapper:
         bundle = _bundle(medication, statement, _request())
         assert self.mapper.map(_request(), bundle) is None
 
-    def test_large_bundle_maps_quickly(self):
-        """Test that lookups are indexed, so thousands of statements map in well under a second."""
+    def test_large_bundle_is_indexed_once(self, monkeypatch):
+        """Test that thousands of statements share one index instead of a scan per lookup."""
         statements = [
             _statement(
                 id=f"ms{i}",
@@ -351,12 +351,20 @@ class TestMedicationRequestMapper:
             statement.pop("medicationCodeableConcept")
         requests = [_request(id=f"mr{i}") for i in range(50)]
         bundle = _bundle(*statements, *requests)
-        started = time.perf_counter()
-        mapped = [self.mapper.map(r, bundle) for r in requests]
-        statement_mapper = MedicationStatementMapper()
-        for statement in statements:
-            statement_mapper.map(statement, bundle)
-        assert time.perf_counter() - started < 3
+        built = []
+        real_index = f.BundleIndex
+
+        def counting_index(b):
+            built.append(b)
+            return real_index(b)
+
+        monkeypatch.setattr(f, "BundleIndex", counting_index)
+        with f.indexed(bundle):
+            mapped = [self.mapper.map(r, bundle) for r in requests]
+            statement_mapper = MedicationStatementMapper()
+            for statement in statements:
+                statement_mapper.map(statement, bundle)
+        assert built == [bundle]
         assert all(m is not None for m in mapped)
         assert mapped[0].data["medication_name"] == "Albuterol Inhaler"
 

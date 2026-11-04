@@ -31,6 +31,7 @@ from app.schemas.health_record_import import (
 
 from . import provenance as prov
 from .mappers import MappedRecord, resource_mapper_registry
+from .mappers._fhir import indexed
 from .patient_match import compare_patient
 
 logger = get_logger(__name__, "app")
@@ -157,6 +158,12 @@ class HealthRecordImportService:
 
     def _build_plan(self, bundle: dict, patient: Patient, source: str) -> _Plan:
         """Map each resource and classify it against existing provenance."""
+        # The mappers share one index of the bundle, dropped when the plan is done
+        with indexed(bundle):
+            return self._plan_entries(bundle, patient, source)
+
+    def _plan_entries(self, bundle: dict, patient: Patient, source: str) -> _Plan:
+        """The plan body; run inside indexed(bundle)."""
         plan = _Plan()
         mapped_items: List[Tuple[MappedRecord, Any]] = []
         for index, entry in enumerate(bundle.get("entry", [])):
@@ -188,10 +195,13 @@ class HealthRecordImportService:
                 TypeError,
                 ArithmeticError,
             ) as exc:
-                # The detail stays in the server log; the client gets a fixed line
+                # Exception text can echo clinical values, so only its type is logged
                 logger.warning(
                     "Health record import could not map a resource",
-                    extra={LogFields.PATIENT_ID: patient.id, LogFields.ERROR: str(exc)},
+                    extra={
+                        LogFields.PATIENT_ID: patient.id,
+                        LogFields.ERROR: type(exc).__name__,
+                    },
                 )
                 plan.warnings.append(f"Skipped {label}: could not be mapped")
                 continue
@@ -220,9 +230,16 @@ class HealthRecordImportService:
         try:
             checked = schema.model_validate({**mapped.data, "patient_id": patient.id})
         except ValidationError as exc:
+            # The error text echoes the rejected values, so only fields and types are logged
             logger.warning(
                 "Health record import rejected a mapped resource",
-                extra={LogFields.PATIENT_ID: patient.id, LogFields.ERROR: str(exc)},
+                extra={
+                    LogFields.PATIENT_ID: patient.id,
+                    LogFields.ERROR: ", ".join(
+                        f"{'.'.join(map(str, e['loc']))}:{e['type']}"
+                        for e in exc.errors()
+                    ),
+                },
             )
             return False
         # Keep the schema's normalized values so the row matches what the API would write

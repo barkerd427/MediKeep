@@ -62,7 +62,9 @@ class AllergyMapper(BaseResourceMapper):
         )
         if verification == "unconfirmed":
             status = "unconfirmed"
-        onset_date = f.parse_date(f.period(resource, "onset")[0])
+        onset_date = f.past_date(
+            f.parse_date(f.period(resource, "onset")[0]), warnings, "onset date"
+        )
         allergen = f.fit(allergen, MAX_ALLERGEN, warnings, "allergen")
         data = {
             "allergen": allergen,

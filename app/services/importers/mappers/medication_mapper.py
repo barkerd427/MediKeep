@@ -223,6 +223,8 @@ class _MedicationMapper(BaseResourceMapper):
     RECORD_TYPE = "medication"
     MODEL = Medication
     CREATE_SCHEMA = MedicationCreate
+    # The source cannot tell prescription from over-the-counter; the user's choice stands
+    preserve_on_update = ("notes", "tags", "medication_type")
     STATUS_MAP: dict = {}
     DOSAGE_FIELD = "dosage"
 
