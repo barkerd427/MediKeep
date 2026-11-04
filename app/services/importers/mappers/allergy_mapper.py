@@ -5,6 +5,7 @@ Maps FHIR AllergyIntolerance resources onto the Allergy table.
 from typing import Any, List, Optional, Tuple
 
 from app.models.clinical import Allergy
+from app.schemas.allergy import AllergyCreate
 
 from . import _fhir as f
 from .base_mapper import BaseResourceMapper, MappedRecord
@@ -40,6 +41,7 @@ class AllergyMapper(BaseResourceMapper):
     RESOURCE_TYPE = "AllergyIntolerance"
     RECORD_TYPE = "allergy"
     MODEL = Allergy
+    CREATE_SCHEMA = AllergyCreate
 
     def map(self, resource: dict, bundle: dict) -> Optional[MappedRecord]:
         """Map one AllergyIntolerance; None when refuted, in error or unnamed."""
@@ -74,7 +76,9 @@ class AllergyMapper(BaseResourceMapper):
             record_type=self.RECORD_TYPE,
             external_id=resource.get("id"),
             data=data,
-            hash_parts=self._parts(allergen, data["reaction"], onset_date, status),
+            hash_parts=self._parts(
+                allergen, data["reaction"], data["severity"], onset_date, status
+            ),
             label=f"AllergyIntolerance/{resource.get('id', '?')}",
             warnings=warnings,
         )
@@ -89,12 +93,21 @@ class AllergyMapper(BaseResourceMapper):
         return NO_KNOWN_ALLERGIES
 
     def hash_parts_for_row(self, row: Any) -> Tuple[Any, ...]:
-        return self._parts(row.allergen, row.reaction, row.onset_date, row.status)
+        """The same hash_parts, read back from an existing row."""
+        return self._parts(
+            row.allergen, row.reaction, row.severity, row.onset_date, row.status
+        )
 
     @staticmethod
-    def _parts(allergen, reaction, onset_date, status) -> Tuple[Any, ...]:
+    def _parts(allergen, reaction, severity, onset_date, status) -> Tuple[Any, ...]:
         """Normalize the same way from a resource and from a row."""
-        return (f.norm(allergen), f.norm(reaction), f.iso(onset_date), status)
+        return (
+            f.norm(allergen),
+            f.norm(reaction),
+            f.norm(severity),
+            f.iso(onset_date),
+            status,
+        )
 
     @staticmethod
     def _reaction_text(reactions: List[dict]) -> Optional[str]:

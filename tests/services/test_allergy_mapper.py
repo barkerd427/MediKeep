@@ -142,3 +142,8 @@ class TestAllergyMapper:
         assert content_hash(self.mapper.hash_parts_for_row(row)) != content_hash(
             mapped.hash_parts
         )
+        row.reaction = mapped.data["reaction"]
+        row.severity = "mild"
+        assert content_hash(self.mapper.hash_parts_for_row(row)) != content_hash(
+            mapped.hash_parts
+        )

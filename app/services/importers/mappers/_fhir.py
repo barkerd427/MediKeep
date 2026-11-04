@@ -2,8 +2,9 @@
 Small FHIR helpers shared by the resource mappers.
 """
 
+from collections import OrderedDict
 from datetime import date
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 SNOMED = "http://snomed.info/sct"
 ICD10CM = "http://hl7.org/fhir/sid/icd-10-cm"
@@ -66,9 +67,21 @@ def parse_date(value: Any) -> Optional[date]:
             return date(int(text), 1, 1)
         if len(text) == 7:
             return date(int(text[:4]), int(text[5:7]), 1)
+        # The calendar date as written in the source's own zone; no UTC shift
         return date.fromisoformat(text[:10])
     except ValueError:
         return None
+
+
+def to_float(value: Any) -> Optional[float]:
+    """A finite float from a number or numeric string, else None."""
+    if isinstance(value, bool):
+        return None
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    return number if number == number and abs(number) != float("inf") else None
 
 
 def period(resource: dict, base: str) -> Tuple[Optional[str], Optional[str]]:
@@ -95,17 +108,57 @@ def ref_id(reference: Optional[dict]) -> Optional[str]:
     return ref.rsplit("/", 1)[-1] or None
 
 
+class BundleIndex:
+    """Resources of one bundle keyed by (type, id), plus room for mapper caches."""
+
+    def __init__(self, bundle: dict):
+        """Walk the bundle once."""
+        self.resources: Dict[Tuple[str, str], dict] = {}
+        self.by_type: Dict[str, List[dict]] = {}
+        self.memo: Dict[str, Any] = {}  # Per-bundle caches owned by the mappers
+        self.entries = len(bundle.get("entry") or [])
+        for entry in bundle.get("entry") or []:
+            resource = entry.get("resource") if isinstance(entry, dict) else None
+            if not isinstance(resource, dict):
+                continue
+            resource_type = resource.get("resourceType")
+            if not isinstance(resource_type, str):
+                continue
+            self.by_type.setdefault(resource_type, []).append(resource)
+            if resource.get("id") is not None:
+                self.resources.setdefault(
+                    (resource_type, str(resource["id"])), resource
+                )
+
+    def get(self, resource_type: str, resource_id: Any) -> Optional[dict]:
+        """A resource by type and id, or None."""
+        if resource_id is None:
+            return None
+        return self.resources.get((resource_type, str(resource_id)))
+
+
+# The last few bundles seen, keyed by object id; the bundle itself is kept so
+# the id cannot be reused while its index is cached
+_INDEXES: "OrderedDict[int, Tuple[dict, BundleIndex]]" = OrderedDict()
+_INDEX_LIMIT = 4
+
+
+def bundle_index(bundle: dict) -> BundleIndex:
+    """The BundleIndex for a bundle, built on first use and reused while cached."""
+    entries = len(bundle.get("entry") or [])
+    cached = _INDEXES.get(id(bundle))
+    if cached is not None and cached[0] is bundle and cached[1].entries == entries:
+        return cached[1]
+    index = BundleIndex(bundle)
+    _INDEXES[id(bundle)] = (bundle, index)
+    while len(_INDEXES) > _INDEX_LIMIT:
+        _INDEXES.popitem(last=False)
+    return index
+
+
 def find_resource(bundle: dict, resource_type: str, resource_id: str) -> Optional[dict]:
     """A bundle entry by type and id, or None."""
-    for entry in bundle.get("entry") or []:
-        resource = entry.get("resource") if isinstance(entry, dict) else None
-        if (
-            isinstance(resource, dict)
-            and resource.get("resourceType") == resource_type
-            and resource.get("id") == resource_id
-        ):
-            return resource
-    return None
+    return bundle_index(bundle).get(resource_type, resource_id)
 
 
 def fit(

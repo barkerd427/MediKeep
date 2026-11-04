@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from fastapi import Request
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.core.logging.config import get_logger
@@ -179,7 +180,14 @@ class HealthRecordImportService:
             label = f"{resource_type}/{resource.get('id', '?')}"
             try:
                 mapped = mapper.map(resource, bundle)
-            except (AttributeError, KeyError, IndexError, ValueError, TypeError) as exc:
+            except (
+                AttributeError,
+                KeyError,
+                IndexError,
+                ValueError,
+                TypeError,
+                ArithmeticError,
+            ) as exc:
                 # The detail stays in the server log; the client gets a fixed line
                 logger.warning(
                     "Health record import could not map a resource",
@@ -192,6 +200,9 @@ class HealthRecordImportService:
                 if reason and reason not in plan.warnings:
                     plan.warnings.append(reason)
                 continue
+            if not self._validate(mapped, mapper, patient):
+                plan.warnings.append(f"Skipped {label}: failed validation")
+                continue
             plan.warnings.extend(f"{mapped.label}: {w}" for w in mapped.warnings)
             mapped_items.append((mapped, mapper))
 
@@ -200,6 +211,23 @@ class HealthRecordImportService:
             plan.rows.append(self._classify(plan, mapped, source, mapper))
         plan.warnings = plan.warnings[:MAX_WARNINGS]
         return plan
+
+    def _validate(self, mapped: MappedRecord, mapper: Any, patient: Patient) -> bool:
+        """Run the mapped values through the record type's create schema."""
+        schema = getattr(mapper, "CREATE_SCHEMA", None)
+        if schema is None:
+            return True
+        try:
+            checked = schema.model_validate({**mapped.data, "patient_id": patient.id})
+        except ValidationError as exc:
+            logger.warning(
+                "Health record import rejected a mapped resource",
+                extra={LogFields.PATIENT_ID: patient.id, LogFields.ERROR: str(exc)},
+            )
+            return False
+        # Keep the schema's normalized values so the row matches what the API would write
+        mapped.data = {key: getattr(checked, key) for key in mapped.data}
+        return True
 
     def _load_existing(
         self,

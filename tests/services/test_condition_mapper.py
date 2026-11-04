@@ -144,12 +144,19 @@ class TestConditionMapper:
         assert mapped.data["diagnosis"].endswith("...")
         assert "diagnosis truncated to 500 characters" in mapped.warnings
 
-    def test_entered_in_error_is_skipped(self):
-        """Test that an entered-in-error condition is not mapped."""
-        resource = _condition(
-            verificationStatus=_status("entered-in-error", VERIFICATION)
-        )
-        assert self.mapper.map(resource, BUNDLE) is None
+    def test_entered_in_error_and_refuted_are_skipped(self):
+        """Test that a ruled-out or erroneous condition is not mapped."""
+        for code in ("entered-in-error", "refuted"):
+            resource = _condition(verificationStatus=_status(code, VERIFICATION))
+            assert self.mapper.map(resource, BUNDLE) is None, code
+
+    def test_provisional_is_noted(self):
+        """Test that a provisional or differential diagnosis stays active with a note."""
+        for code in ("provisional", "differential"):
+            resource = _condition(verificationStatus=_status(code, VERIFICATION))
+            mapped = self.mapper.map(resource, BUNDLE)
+            assert mapped.data["status"] == "active"
+            assert mapped.data["notes"] == f"Verification: {code}"
 
     def test_without_name_is_skipped(self):
         """Test that a Condition without a code is not mapped."""
@@ -165,6 +172,11 @@ class TestConditionMapper:
             mapped.hash_parts
         )
         row.diagnosis = "Edited by hand"
+        assert content_hash(self.mapper.hash_parts_for_row(row)) != content_hash(
+            mapped.hash_parts
+        )
+        row.diagnosis = mapped.data["diagnosis"]
+        row.severity = "severe"
         assert content_hash(self.mapper.hash_parts_for_row(row)) != content_hash(
             mapped.hash_parts
         )
