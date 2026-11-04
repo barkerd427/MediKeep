@@ -1,15 +1,27 @@
-# Handoff: open PR 2 on afairgiant/MediKeep
+# Handoff: open PR 2 on afairgiant/MediKeep (revised after review)
 
-PR 1 (#1214) merged as ed6458c. Open PR 2 now. PR 3 is listed too; open it
-only if the maintainer asks to see it before PR 2 merges, otherwise wait.
-Delete this branch after use. The old `import-framework`, `import-fhir-mapper`
-and `import-ccda` branches on the fork are superseded and can be deleted.
+Review findings 1 to 8 and both design points are applied in 00a3d0a on
+`fhir-mappers` and carried into `ccda-import` (24617dd). Summary of what
+changed for the re-review: per-bundle index (2,000 statements + 50 requests
+map in 0.19 s); SNOMED routes mapped to the 11 allowed values, unknown route
+to notes with a warning; refuted conditions skipped, provisional/differential
+noted; dosing period guarded (0 < period, 1..48 results, half-up rounding,
+ArithmeticError caught); numeric strings coerced; RxNorm resolved through
+medicationReference for dedupe; docs state the "either side has no start"
+rule; every overwritten column is in the content hash; rows validated through
+ConditionCreate/AllergyCreate/MedicationCreate at plan time. TZ date test
+added (date kept as written in the source's zone).
 
-Author on both branches is Daniel Barker, one commit each, no trailers.
+Open PR 2 once satisfied. PR 3 is listed too; open it only if the maintainer
+asks to see it before PR 2 merges. Delete this branch after use. Do not delete
+`import-ccda` until the production compose pin has moved.
+
+Author on both branches is Daniel Barker, no trailers. `fhir-mappers` has two
+commits (b6c59f6, 00a3d0a); squash on merge is fine and the body says so.
 
 ## PR 2
 
-- Head: `barkerd427:fhir-mappers` (b6c59f6)
+- Head: `barkerd427:fhir-mappers` (00a3d0a)
 - Base: `afairgiant:main`
 - Not a draft
 - Title: `feat: FHIR mappers for conditions, allergies and medications`
@@ -35,25 +47,27 @@ Refs #1183
 ## What is in here
 
 - `app/services/importers/mappers/_fhir.py`: small helpers for CodeableConcepts, partial dates, references, notes and column fitting.
-- `condition_mapper.py`: diagnosis from the concept text or display, ICD-10 and SNOMED codes, status from `clinicalStatus` (`remission` becomes `inactive`; an abatement date forces `resolved`), severity matched on its display text, notes from annotations. Entered-in-error conditions are skipped.
+- `condition_mapper.py`: diagnosis from the concept text or display, ICD-10 and SNOMED codes, status from `clinicalStatus` (`remission` becomes `inactive`; an abatement date forces `resolved`), severity matched on its display text, notes from annotations. Refuted and entered-in-error conditions are skipped; provisional, differential and unconfirmed ones stay active with a `Verification: ...` note.
 - `allergy_mapper.py`: allergen, manifestations joined into the reaction text, severity from the first reaction then `criticality`, status from `clinicalStatus` with `unconfirmed` from `verificationStatus`. Refuted and entered-in-error allergies are skipped. An allergy with no reaction gets `Not specified`, since the column is required.
-- `medication_mapper.py`: name from the inline concept, a contained `Medication` or a bundle entry; dosage from `doseAndRate` or the sig text; frequency rendered from `timing`; route; dates from `effectivePeriod`, timing bounds or `dispenseRequest.validityPeriod`; indication from `reasonCode`. Two rules from the Epic export: a request with no bounds and no validity period gets no start date, because `authoredOn` is when the order was written or reconciled, not when therapy began; and a timing period below one day or hour (Epic writes twice daily as period `0.5 d`) renders as "N times per day" with N = round(1/period). `cancelled` and `entered-in-error` are skipped. A `MedicationRequest` is skipped when a `MedicationStatement` in the same bundle names the same drug with the same start date. RxNorm codes are not stored; there is no column for them.
+- `medication_mapper.py`: name from the inline concept, a contained `Medication` or a bundle entry; dosage from `doseAndRate` or the sig text; frequency rendered from `timing`; route mapped from SNOMED codes and common wordings onto the values `MedicationBase.validate_route` accepts (a route with no match is left empty, kept in the notes as `Route: ...` and reported in `warnings`); dates from `effectivePeriod`, timing bounds or `dispenseRequest.validityPeriod`; indication from `reasonCode`. Two rules from the Epic export: a request with no bounds and no validity period gets no start date, because `authoredOn` is when the order was written or reconciled, not when therapy began; and a timing period below one day or hour (Epic writes twice daily as period `0.5 d`) renders as "N times per day", rounded half up, dropped with a warning when the period is zero, negative or absurd. `cancelled` and `entered-in-error` are skipped. A `MedicationRequest` is skipped when a `MedicationStatement` in the same bundle names the same drug (RxNorm code, resolved through a referenced `Medication` when needed, else the name) with the same start date, or when either side has no start date. RxNorm codes are not stored; there is no column for them.
+- Bundle lookups go through a per-bundle index built once (`_fhir.BundleIndex`), so a 2,000-statement bundle maps in a fraction of a second instead of rescanning the bundle per resource.
+- Every mapped row is validated through the record type's existing create schema (`ConditionCreate`, `AllergyCreate`, `MedicationCreate`) before it is written; a row that fails is skipped with `Skipped <type>/<id>: failed validation` and the detail goes to the server log.
 - Mappers are registered as defaults in `mappers/__init__.py`, like `vitals_parsers`.
 - `MappedRecord.warnings`: values cut to fit a column (or an end date before the start) are reported in the preview and execute `warnings`, capped at 50.
-- Content hash per record type covers the fields a person is likely to edit (diagnosis and codes, allergen and reaction, drug name, dosage and frequency, plus dates and status), so a local edit to any of them marks the row as changed and it is skipped on re-import by default.
+- Content hash per record type covers every column a re-import overwrites (everything except `notes` and `tags`), so a local edit to any of them marks the row as changed and it is skipped on re-import by default.
 - Docs: "Supported Resources" under API reference 12.3 with the fallback decisions.
 
 ## Testing
 
-- `tests/services/test_condition_mapper.py`, `test_allergy_mapper.py`, `test_medication_mapper.py`: mapping on dict resources, status and severity fallbacks, truncation warnings, skips, request-versus-statement precedence, and a hash round-trip against a model instance for each mapper.
+- `tests/services/test_condition_mapper.py`, `test_allergy_mapper.py`, `test_medication_mapper.py`, `test_fhir_helpers.py`: mapping on dict resources, status and severity fallbacks, route codes and wordings, string-typed numbers, unusable timing periods, truncation warnings, skips, request-versus-statement precedence (including through a referenced `Medication`), a 2,000-statement timing check, and a hash round-trip against a model instance for each mapper.
 - `tests/api/test_health_record_import.py`: the first PR's stub mapper is gone; the same cases now run on the real mappers, plus a class on `tests/fixtures/health_record_import/fhir_bundle_mapper.json` (hand-written) that checks the written values, provenance rows, duplicates on re-import, a renamed allergy being skipped, the `sections` filter, and a truncation warning.
 
-`pytest tests/services tests/api/test_health_record_import.py tests/api/test_import_provenance_migration.py tests/api/test_conditions.py tests/api/test_allergies.py tests/api/test_medications.py`: 843 passed.
+`pytest tests/services tests/api/test_health_record_import.py tests/api/test_import_provenance_migration.py tests/api/test_conditions.py tests/api/test_allergies.py tests/api/test_medications.py`: 855 passed.
 
 ## Checklist
 
 - [x] Tests added or updated (or N/A with reason)
-- [x] `npm run lint` and `npm run build` pass (no frontend changes)
+- [ ] `npm run lint` and `npm run build` pass: N/A, no frontend changes
 - [x] Backend tests pass (`pytest`) if backend code changed
 - [x] No PHI, secrets, or `console.log` left in the diff
 - [x] User-facing strings go through `t()` translations (no UI in this PR)
@@ -61,7 +75,7 @@ Refs #1183
 
 ## PR 3 (later)
 
-- Head: `barkerd427:ccda-import` (c99fe30)
+- Head: `barkerd427:ccda-import` (24617dd)
 - Base: `barkerd427:fhir-mappers` until PR 2 merges, then `afairgiant:main`
 - Title: `feat: import C-CDA documents and MyChart zips`
 - Body:
@@ -104,12 +118,12 @@ Refs #1183
 - `tests/api/test_health_record_import.py`: new class on the fixture as XML and as a zip built in the test: counts per section, the file's patient and the converter notes in `warnings`, rows and provenance with `source == "ccda"`, re-import of the same document as bare XML reported as duplicates, and a zip over the member cap rejected.
 - Same file, second class on the synthetic Epic export: 4 conditions and 5 medications previewed and written (sertraline twice daily, no start date for the two orders without timing bounds), no allergy row from the "no known allergies" entry but the warning for it, no notes for empty sections, 150 Observations and 11 DiagnosticReports listed as unsupported, the file's patient and birth date mismatch, the converter's notes for the Care Teams section and the two result organizers it skipped, and a re-import as an XDM zip reported as all duplicates.
 
-`pytest tests/services tests/api/test_health_record_import.py tests/api/test_import_provenance_migration.py tests/api/test_conditions.py tests/api/test_allergies.py tests/api/test_medications.py`: 863 passed, run with the PyPI wheel `healthrecord-bridge==0.2.0` installed.
+`pytest tests/services tests/api/test_health_record_import.py tests/api/test_import_provenance_migration.py tests/api/test_conditions.py tests/api/test_allergies.py tests/api/test_medications.py`: 875 passed, run with the PyPI wheel `healthrecord-bridge==0.2.0` installed.
 
 ## Checklist
 
 - [x] Tests added or updated (or N/A with reason)
-- [x] `npm run lint` and `npm run build` pass (no frontend changes)
+- [ ] `npm run lint` and `npm run build` pass: N/A, no frontend changes
 - [x] Backend tests pass (`pytest`) if backend code changed
 - [x] No PHI, secrets, or `console.log` left in the diff
 - [x] User-facing strings go through `t()` translations (no UI in this PR)
