@@ -150,6 +150,26 @@ class TestConditionMapper:
         resource = _condition(severity={"text": "Unknown"})
         assert self.mapper.map(resource, BUNDLE).data["severity"] is None
 
+    def test_oversized_codes_are_dropped_not_cut(self):
+        """Test that a code over its column limit is dropped whole, never shortened."""
+        resource = _condition(
+            code={
+                "coding": [
+                    {"system": "http://snomed.info/sct", "code": "1" * 21},
+                    {
+                        "system": "http://hl7.org/fhir/sid/icd-10-cm",
+                        "code": "I10.ABCDEFGH",
+                    },
+                ],
+                "text": "Hypertension",
+            }
+        )
+        mapped = self.mapper.map(resource, BUNDLE)
+        assert mapped.data["snomed_code"] is None
+        assert mapped.data["icd10_code"] is None
+        assert "SNOMED code longer than 20 characters, dropped" in mapped.warnings
+        assert "ICD-10 code longer than 10 characters, dropped" in mapped.warnings
+
     def test_long_diagnosis_is_truncated_with_warning(self):
         """Test that text over the column limit is cut and reported."""
         resource = _condition(code={"text": "x" * 600})

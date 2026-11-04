@@ -189,7 +189,8 @@ def _frequency_text(timing: Optional[dict], warnings: List[str]) -> Optional[str
     if freq is None and repeat.get("frequency") is not None:
         warnings.append("frequency is not a number, timing dropped")
         return None
-    freq = freq or 1
+    if freq is None:
+        freq = 1
     if period is not None and unit:
         if period <= 0 or freq <= 0:
             warnings.append("timing has a period or frequency of zero or less, dropped")
